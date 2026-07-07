@@ -9,12 +9,41 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-const UPLOAD_DIR = path.join(__dirname, 'public', 'uploads');
-fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+const PUBLIC_DIR = path.join(__dirname, 'public');
+const UPLOAD_ROOT = path.join(PUBLIC_DIR, 'uploads');
+const LIBRARY_FILE = path.join(__dirname, 'library.json');
+
+fs.mkdirSync(UPLOAD_ROOT, { recursive: true });
+
+app.use(express.static(PUBLIC_DIR));
+app.use(express.json());
+
+// ---------- Song library persistence ----------
+// library.json shape: { [slug]: { name: "New Year", songs: [{title, url}] } }
+function loadLibrary() {
+  try {
+    return JSON.parse(fs.readFileSync(LIBRARY_FILE, 'utf8'));
+  } catch (e) {
+    return {};
+  }
+}
+function saveLibrary(lib) {
+  fs.writeFileSync(LIBRARY_FILE, JSON.stringify(lib, null, 2));
+}
+function slugify(name) {
+  const s = (name || '').trim().toLowerCase()
+    .replace(/[^a-z0-9а-яё]+/gi, '_')
+    .replace(/^_+|_+$/g, '');
+  return s || 'folder';
+}
 
 const upload = multer({
   storage: multer.diskStorage({
-    destination: (req, file, cb) => cb(null, UPLOAD_DIR),
+    destination: (req, file, cb) => {
+      const dir = path.join(UPLOAD_ROOT, req.params.slug);
+      fs.mkdirSync(dir, { recursive: true });
+      cb(null, dir);
+    },
     filename: (req, file, cb) => {
       const safe = Date.now() + '-' + Math.round(Math.random() * 1e6) + path.extname(file.originalname);
       cb(null, safe);
@@ -23,22 +52,76 @@ const upload = multer({
   limits: { fileSize: 25 * 1024 * 1024 } // 25MB per file
 });
 
-app.use(express.static(path.join(__dirname, 'public')));
-app.use(express.json());
-
-// Upload one or more mp3 files, returns [{title, url}]
-app.post('/api/upload', upload.array('songs', 100), (req, res) => {
-  const files = (req.files || []).map((f) => ({
-    title: path.parse(f.originalname).name.replace(/[_\-]+/g, ' ').trim(),
-    url: '/uploads/' + f.filename
-  }));
-  res.json({ files });
+// List folders with song counts: { slug: { name, count } }
+app.get('/api/library', (req, res) => {
+  const lib = loadLibrary();
+  const out = {};
+  for (const slug in lib) out[slug] = { name: lib[slug].name, count: lib[slug].songs.length };
+  res.json(out);
 });
 
-// In-memory store: code -> { songs: [{title, url}], revealed: string[], players: Map(socketId->name), winner, createdAt }
+// Full song list for one folder
+app.get('/api/library/:slug', (req, res) => {
+  const lib = loadLibrary();
+  const folder = lib[req.params.slug];
+  if (!folder) return res.status(404).json({ error: 'Папка не найдена.' });
+  res.json({ name: folder.name, songs: folder.songs });
+});
+
+// Create a new (empty) folder
+app.post('/api/library/folder', (req, res) => {
+  const name = (req.body.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'Укажите название папки.' });
+  const slug = slugify(name);
+  const lib = loadLibrary();
+  if (!lib[slug]) lib[slug] = { name, songs: [] };
+  saveLibrary(lib);
+  res.json({ slug, name: lib[slug].name });
+});
+
+// Upload mp3s into a folder (creates the folder if it doesn't exist)
+app.post('/api/library/:slug/upload', upload.array('songs', 200), (req, res) => {
+  const slug = req.params.slug;
+  const lib = loadLibrary();
+  if (!lib[slug]) lib[slug] = { name: req.body.folderName || slug, songs: [] };
+  const added = (req.files || []).map((f) => ({
+    title: path.parse(f.originalname).name.replace(/[_\-]+/g, ' ').trim(),
+    url: '/uploads/' + slug + '/' + f.filename
+  }));
+  lib[slug].songs.push(...added);
+  saveLibrary(lib);
+  res.json({ added, total: lib[slug].songs.length });
+});
+
+// Delete a single song from a folder (and its file)
+app.delete('/api/library/:slug/song', (req, res) => {
+  const { url } = req.body;
+  const lib = loadLibrary();
+  const folder = lib[req.params.slug];
+  if (!folder) return res.status(404).json({ error: 'Папка не найдена.' });
+  folder.songs = folder.songs.filter((s) => s.url !== url);
+  saveLibrary(lib);
+  if (url) {
+    const filePath = path.join(PUBLIC_DIR, url.replace(/^\//, ''));
+    fs.unlink(filePath, () => {});
+  }
+  res.json({ ok: true });
+});
+
+// Delete an entire folder
+app.delete('/api/library/:slug', (req, res) => {
+  const lib = loadLibrary();
+  if (!lib[req.params.slug]) return res.status(404).json({ error: 'Папка не найдена.' });
+  delete lib[req.params.slug];
+  saveLibrary(lib);
+  fs.rm(path.join(UPLOAD_ROOT, req.params.slug), { recursive: true, force: true }, () => {});
+  res.json({ ok: true });
+});
+
+// ---------- Live games (in-memory, ephemeral) ----------
+// code -> { songs: [{title,url}], revealed: string[], players: Map(socketId->name), winner, createdAt }
 const games = new Map();
 
-// Clean up games older than 12 hours, checked every hour
 setInterval(() => {
   const cutoff = Date.now() - 12 * 60 * 60 * 1000;
   for (const [code, game] of games) {
@@ -52,27 +135,50 @@ function genCode() {
   for (let i = 0; i < 4; i++) c += chars[Math.floor(Math.random() * chars.length)];
   return games.has(c) ? genCode() : c;
 }
-
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
 function playersPayload(game) {
   return { count: game.players.size, names: Array.from(game.players.values()) };
+}
+function newGame(songs) {
+  const code = genCode();
+  games.set(code, { songs, revealed: [], players: new Map(), winner: null, createdAt: Date.now() });
+  return code;
 }
 
 io.on('connection', (socket) => {
   socket.on('create_game', (songs, cb) => {
-    // songs: [{title, url}] — url may be null/undefined for text-only songs
     if (!Array.isArray(songs) || songs.length < 9) {
       return cb({ error: 'Нужно минимум 9 песен.' });
     }
-    const code = genCode();
-    games.set(code, {
-      songs,
-      revealed: [],
-      players: new Map(),
-      winner: null,
-      createdAt: Date.now()
-    });
+    const code = newGame(songs);
     socket.join(code);
-    cb({ code, songs });
+    cb({ code, songs: games.get(code).songs });
+  });
+
+  socket.on('create_game_from_folder', ({ slug, count }, cb) => {
+    const lib = loadLibrary();
+    const folder = lib[slug];
+    if (!folder) return cb({ error: 'Папка не найдена.' });
+    if (folder.songs.length < 9) return cb({ error: 'В папке меньше 9 песен.' });
+    const n = Math.max(9, Math.min(count || folder.songs.length, folder.songs.length));
+    const chosen = shuffle(folder.songs).slice(0, n);
+    const code = newGame(chosen);
+    socket.join(code);
+    cb({ code, songs: games.get(code).songs });
+  });
+
+  socket.on('host_rejoin', (code, cb) => {
+    const game = games.get(code);
+    if (!game) return cb({ error: 'Игра не найдена (возможно, истекла).' });
+    socket.join(code);
+    cb({ songs: game.songs, revealed: game.revealed, winner: game.winner, playerCount: game.players.size });
   });
 
   socket.on('join_game', (code, name, cb) => {
@@ -81,11 +187,7 @@ io.on('connection', (socket) => {
     socket.join(code);
     game.players.set(socket.id, (name || 'Игрок').slice(0, 30));
     io.to(code).emit('players_update', playersPayload(game));
-    cb({
-      songs: game.songs.map((s) => s.title),
-      revealed: game.revealed,
-      winner: game.winner
-    });
+    cb({ songs: game.songs.map((s) => s.title), revealed: game.revealed, winner: game.winner });
   });
 
   socket.on('reveal_next', (code, cb) => {
@@ -111,7 +213,7 @@ io.on('connection', (socket) => {
 
   socket.on('claim_bingo', (code, name) => {
     const game = games.get(code);
-    if (!game || game.winner) return; // first claim wins, ignore rest
+    if (!game || game.winner) return;
     game.winner = name || 'Игрок';
     io.to(code).emit('winner_update', { winner: game.winner });
   });
