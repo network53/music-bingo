@@ -3,621 +3,193 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Music Bingo</title>
+<title>Music Bingo - Rockstar Edition</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Grotesk:wght@400;500;700&display=swap');
-  :root{
-    --bg:#14111c; --bg-2:#1d1828; --pink:#ff3d7f; --gold:#ffd23f;
-    --violet:#8b7fd1; --ink:#f2eef7; --ink-dim:#b6adc9; --line:rgba(242,238,247,0.10);
-  }
-  *{box-sizing:border-box;}
-  body{
-    margin:0; font-family:'Space Grotesk', sans-serif;
-    background:
-      radial-gradient(ellipse 80% 60% at 50% -10%, rgba(255,61,127,0.18), transparent),
-      radial-gradient(ellipse 60% 50% at 100% 100%, rgba(139,127,209,0.14), transparent),
-      var(--bg);
-    color:var(--ink); min-height:100vh; padding:20px 14px 60px;
-  }
-  .mb-title{
-    font-family:'Bebas Neue', sans-serif; letter-spacing:2px; font-size:38px;
-    text-align:center; line-height:1; margin:6px 0 2px;
-    background:linear-gradient(90deg, var(--pink), var(--gold));
-    -webkit-background-clip:text; background-clip:text; color:transparent;
-  }
-  .mb-sub{text-align:center; color:var(--ink-dim); font-size:13px; margin-bottom:22px;}
-  .mb-tabs{display:flex; gap:8px; max-width:460px; margin:0 auto 22px; background:var(--bg-2); padding:5px; border-radius:14px; border:1px solid var(--line);}
-  .mb-tab{flex:1; text-align:center; padding:10px 0; border-radius:10px; font-weight:700; font-size:13px; cursor:pointer; color:var(--ink-dim);}
-  .mb-tab.active{background:var(--pink); color:#1a0f16;}
-  .mb-card{max-width:460px; margin:0 auto 16px; background:var(--bg-2); border:1px solid var(--line); border-radius:18px; padding:20px;}
-  .mb-label{font-size:12px; text-transform:uppercase; letter-spacing:1.2px; color:var(--ink-dim); margin-bottom:6px; display:block;}
-  textarea.mb-input, input.mb-input{width:100%; background:#0f0c16; border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:11px 12px; font-family:inherit; font-size:14px; resize:vertical;}
-  input.mb-code{text-transform:uppercase; letter-spacing:2px; font-weight:700; text-align:center;}
-  .mb-btn{width:100%; border:none; border-radius:12px; padding:13px 0; font-weight:700; font-size:15px; cursor:pointer; margin-top:12px;}
-  .mb-btn:active{transform:scale(0.98);}
-  .mb-btn-sm{width:auto; padding:8px 14px; font-size:13px; margin-top:0;}
-  .mb-btn-primary{background:linear-gradient(90deg,var(--pink),#ff6a9a); color:#1a0f16;}
-  .mb-btn-ghost{background:transparent; border:1px solid var(--line); color:var(--ink);}
-  .mb-btn-gold{background:var(--gold); color:#1a0f16;}
-  .mb-btn-danger{background:transparent; border:1px solid rgba(255,61,127,0.4); color:var(--pink);}
-  .mb-btn:disabled{opacity:0.4; cursor:not-allowed;}
-  .mb-code-display{font-family:'Bebas Neue', sans-serif; font-size:52px; letter-spacing:10px; text-align:center; color:var(--gold); text-shadow:0 0 24px rgba(255,210,63,0.5); margin:6px 0 2px;}
-  .mb-code-hint{text-align:center; color:var(--ink-dim); font-size:12px; margin-bottom:6px;}
-  .mb-share-row{display:flex; gap:8px; align-items:center; background:#0f0c16; border:1px solid var(--line); border-radius:10px; padding:8px 10px; margin-top:10px; font-size:11.5px; color:var(--ink-dim);}
-  .mb-share-row input{border:none; background:transparent; color:var(--ink); flex:1; font-size:11.5px; padding:0;}
-  .mb-song-row{display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid var(--line); font-size:13px; gap:8px;}
-  .mb-song-row.revealed{color:var(--gold);}
-  .mb-badge{font-size:10px; padding:2px 8px; border-radius:20px; background:rgba(255,210,63,0.15); color:var(--gold); font-weight:700; white-space:nowrap;}
-  .mb-remove{color:var(--pink); cursor:pointer; font-size:16px; font-weight:700; padding:0 4px;}
-  .mb-grid{display:grid; gap:6px; margin-top:6px;}
-  .mb-cell{aspect-ratio:1; display:flex; align-items:center; justify-content:center; text-align:center; font-size:10.5px; line-height:1.15; padding:4px; border-radius:9px; background:#0f0c16; border:1px solid var(--line); color:var(--ink-dim); transition:all .2s ease; opacity:0.55;}
-  .mb-cell.ready{opacity:1; border-color:var(--gold); box-shadow:0 0 8px rgba(255,210,63,0.35); cursor:pointer; color:var(--ink);}
-  .mb-cell.hit{opacity:1; cursor:pointer; background:radial-gradient(circle, var(--pink), #c2255f); color:#fff; border-color:var(--pink); box-shadow:0 0 14px rgba(255,61,127,0.55); transform:scale(1.03);}
-  .mb-cell.free{opacity:1; background:linear-gradient(160deg, var(--gold), #d8ab1f); color:#1a0f16; font-weight:700; border-color:var(--gold);}
-  .mb-bingo-banner{text-align:center; font-family:'Bebas Neue', sans-serif; font-size:34px; letter-spacing:4px; color:var(--gold); text-shadow:0 0 20px rgba(255,210,63,0.6); margin:10px 0 4px; animation:mbPulse 1s ease-in-out infinite;}
-  @keyframes mbPulse{0%,100%{transform:scale(1);} 50%{transform:scale(1.05);}}
-  .mb-error{color:var(--pink); font-size:13px; margin-top:8px; text-align:center;}
-  .mb-note{color:var(--ink-dim); font-size:11.5px; margin-top:10px; line-height:1.5;}
-  .mb-row2{display:flex; gap:10px;}
-  .mb-row2 > *{flex:1;}
-  .mb-pill{display:inline-block; background:rgba(139,127,209,0.18); color:var(--violet); font-size:12px; font-weight:700; padding:4px 12px; border-radius:20px; margin:0 auto 10px; text-align:center;}
-  .mb-pill-wrap{text-align:center;}
-  .mb-qr{display:block; margin:10px auto; border-radius:14px; background:#fff; padding:10px;}
-  .mb-screen-code{font-family:'Bebas Neue', sans-serif; font-size:72px; letter-spacing:14px; text-align:center; color:var(--gold); text-shadow:0 0 30px rgba(255,210,63,0.5);}
-  .mb-now-playing{text-align:center; font-size:16px; color:var(--ink); margin-top:14px; min-height:22px;}
-  .mb-winner-banner{text-align:center; font-family:'Bebas Neue', sans-serif; font-size:44px; letter-spacing:3px; color:var(--gold); text-shadow:0 0 30px rgba(255,210,63,0.7); margin:16px 0 4px; animation:mbPulse 0.8s ease-in-out infinite;}
-  .mb-subtabs{display:flex; gap:6px; margin-bottom:14px;}
-  .mb-subtab{flex:1; text-align:center; padding:8px 0; border-radius:8px; font-size:12.5px; font-weight:700; cursor:pointer; color:var(--ink-dim); border:1px solid var(--line);}
-  .mb-subtab.active{background:rgba(255,61,127,0.15); color:var(--pink); border-color:var(--pink);}
-  .mb-folder-card{border:1px solid var(--line); border-radius:12px; padding:12px; margin-bottom:10px;}
-  .mb-folder-head{display:flex; justify-content:space-between; align-items:center;}
-  .mb-folder-name{font-weight:700; font-size:14px;}
-  .mb-folder-count{color:var(--ink-dim); font-size:12px;}
-  .mb-folder-actions{display:flex; gap:6px; margin-top:10px;}
-  .mb-claim-banner{background:rgba(255,210,63,0.12); border:1px solid var(--gold); border-radius:12px; padding:14px; text-align:center; margin-bottom:14px;}
-  .mb-claim-banner b{color:var(--gold);}
-  .mb-reject-banner{background:rgba(255,61,127,0.12); border:1px solid var(--pink); border-radius:10px; padding:10px; text-align:center; font-size:13px; margin-bottom:12px; color:var(--pink);}
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+:root{--bg:#0a0a0f;--bg-2:#12121a;--bg-3:#1a1a28;--bg-4:#222236;--pink:#ff2d78;--pink-glow:rgba(255,45,120,0.35);--gold:#ffd700;--gold-glow:rgba(255,215,0,0.35);--cyan:#00e5ff;--cyan-glow:rgba(0,229,255,0.25);--violet:#a855f7;--violet-glow:rgba(168,85,247,0.25);--green:#00e676;--green-glow:rgba(0,230,118,0.25);--orange:#ff9100;--orange-glow:rgba(255,145,0,0.25);--ink:#f0f0f5;--ink-dim:#8a8aa0;--ink-faint:#55556b;--line:rgba(255,255,255,0.06);--line-strong:rgba(255,255,255,0.12);--radius:16px;--radius-sm:10px;}
+*{box-sizing:border-box;margin:0;padding:0;}html{scroll-behavior:smooth;}body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;overflow-x:hidden;}
+.bg-orb{position:fixed;border-radius:50%;filter:blur(80px);opacity:0.15;pointer-events:none;z-index:0;animation:orbFloat 20s ease-in-out infinite;}
+.bg-orb-1{width:600px;height:600px;background:var(--pink);top:-200px;left:-200px;animation-delay:0s;}
+.bg-orb-2{width:500px;height:500px;background:var(--violet);bottom:-150px;right:-150px;animation-delay:-7s;}
+.bg-orb-3{width:400px;height:400px;background:var(--cyan);top:40%;left:60%;animation-delay:-14s;}
+@keyframes orbFloat{0%,100%{transform:translate(0,0) scale(1);}33%{transform:translate(30px,-40px) scale(1.1);}66%{transform:translate(-20px,30px) scale(0.95);}}
+.particles{position:fixed;inset:0;pointer-events:none;z-index:1;overflow:hidden;}
+.particle{position:absolute;width:4px;height:4px;border-radius:50%;background:var(--gold);opacity:0;animation:particleRise 8s linear infinite;}
+@keyframes particleRise{0%{transform:translateY(100vh) scale(0);opacity:0;}10%{opacity:0.6;}90%{opacity:0.6;}100%{transform:translateY(-10vh) scale(1);opacity:0;}}
+.app{position:relative;z-index:2;max-width:520px;margin:0 auto;padding:16px;}
+.app-wide{max-width:900px;}
+.logo-wrap{text-align:center;padding:24px 0 8px;}
+.logo{font-family:'Bebas Neue',sans-serif;font-size:52px;letter-spacing:6px;background:linear-gradient(135deg,var(--pink),var(--gold),var(--cyan));-webkit-background-clip:text;background-clip:text;color:transparent;text-shadow:0 0 40px var(--pink-glow);line-height:1;}
+.logo-sub{font-size:12.5px;color:var(--ink-dim);letter-spacing:3px;text-transform:uppercase;margin-top:4px;font-weight:500;}
+.tabs{display:flex;gap:6px;background:var(--bg-2);padding:5px;border-radius:var(--radius);border:1px solid var(--line);margin:20px 0 16px;}
+.tab{flex:1;text-align:center;padding:12px 0;border-radius:var(--radius-sm);font-weight:700;font-size:13px;cursor:pointer;color:var(--ink-dim);transition:all .25s ease;position:relative;overflow:hidden;}
+.tab:hover{color:var(--ink);}
+.tab.active{background:linear-gradient(135deg,var(--pink),#ff5c9a);color:#fff;box-shadow:0 4px 20px var(--pink-glow);}
+.tab .tab-icon{font-size:16px;display:block;margin-bottom:2px;}
+.card{background:var(--bg-2);border:1px solid var(--line);border-radius:var(--radius);padding:20px;margin-bottom:14px;backdrop-filter:blur(10px);transition:all .3s ease;}
+.card:hover{border-color:var(--line-strong);}
+.card-glow-pink{box-shadow:0 0 30px rgba(255,45,120,0.08);border-color:rgba(255,45,120,0.15);}
+.card-glow-gold{box-shadow:0 0 30px rgba(255,215,0,0.08);border-color:rgba(255,215,0,0.15);}
+.label{font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:var(--ink-dim);margin-bottom:8px;display:block;font-weight:600;}
+.title-lg{font-family:'Bebas Neue';font-size:36px;letter-spacing:3px;text-align:center;}
+.title-md{font-family:'Bebas Neue';font-size:28px;letter-spacing:2px;}
+.title-sm{font-weight:700;font-size:16px;}
+.text-dim{color:var(--ink-dim);font-size:13px;line-height:1.6;}
+.text-faint{color:var(--ink-faint);font-size:12px;}
+.input{width:100%;background:var(--bg-3);border:1px solid var(--line);border-radius:var(--radius-sm);color:var(--ink);padding:13px 14px;font-family:inherit;font-size:14px;transition:all .2s ease;}
+.input:focus{outline:none;border-color:var(--pink);box-shadow:0 0 0 3px rgba(255,45,120,0.1);}
+.input::placeholder{color:var(--ink-faint);}
+textarea.input{resize:vertical;min-height:100px;}
+.input-code{text-transform:uppercase;letter-spacing:6px;font-weight:800;text-align:center;font-size:20px;}
+.btn{width:100%;border:none;border-radius:var(--radius-sm);padding:14px 0;font-weight:700;font-size:15px;cursor:pointer;transition:all .2s ease;display:flex;align-items:center;justify-content:center;gap:8px;}
+.btn:active{transform:scale(0.97);}
+.btn:disabled{opacity:0.4;cursor:not-allowed;transform:none;}
+.btn-sm{width:auto;padding:9px 16px;font-size:13px;}
+.btn-pink{background:linear-gradient(135deg,var(--pink),#ff5c9a);color:#fff;box-shadow:0 4px 20px var(--pink-glow);}
+.btn-pink:hover{box-shadow:0 6px 30px var(--pink-glow);transform:translateY(-1px);}
+.btn-gold{background:linear-gradient(135deg,var(--gold),#ffaa00);color:#1a0f00;box-shadow:0 4px 20px var(--gold-glow);}
+.btn-gold:hover{box-shadow:0 6px 30px var(--gold-glow);transform:translateY(-1px);}
+.btn-cyan{background:linear-gradient(135deg,var(--cyan),#00b8d4);color:#001a1f;box-shadow:0 4px 20px var(--cyan-glow);}
+.btn-green{background:linear-gradient(135deg,var(--green),#00c853);color:#001f0a;box-shadow:0 4px 20px var(--green-glow);}
+.btn-orange{background:linear-gradient(135deg,var(--orange),#ff6d00);color:#1a0f00;box-shadow:0 4px 20px var(--orange-glow);}
+.btn-ghost{background:transparent;border:1px solid var(--line-strong);color:var(--ink);}
+.btn-ghost:hover{background:var(--bg-3);border-color:var(--ink-dim);}
+.btn-danger{background:transparent;border:1px solid rgba(255,45,120,0.3);color:var(--pink);}
+.btn-danger:hover{background:rgba(255,45,120,0.08);}
+.code-display{font-family:'Bebas Neue',sans-serif;font-size:56px;letter-spacing:12px;text-align:center;color:var(--gold);text-shadow:0 0 30px var(--gold-glow);margin:8px 0 4px;line-height:1;}
+.code-hint{text-align:center;color:var(--ink-dim);font-size:12px;margin-bottom:6px;}
+.share-row{display:flex;gap:8px;align-items:center;background:var(--bg-3);border:1px solid var(--line);border-radius:var(--radius-sm);padding:10px 12px;margin-top:10px;}
+.share-row input{border:none;background:transparent;color:var(--ink);flex:1;font-size:12.5px;padding:0;font-family:inherit;}
+.share-row .copy-btn{background:var(--bg-4);border:none;color:var(--ink-dim);padding:6px 12px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600;white-space:nowrap;}
+.share-row .copy-btn:hover{background:var(--pink);color:#fff;}
+.song-row{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid var(--line);font-size:13px;gap:8px;}
+.song-row:last-child{border-bottom:none;}
+.song-row.revealed{color:var(--gold);}
+.song-row .song-info{flex:1;min-width:0;}
+.song-row .song-title{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.song-row .song-artist{font-size:11px;color:var(--ink-dim);}
+.badge{font-size:10px;padding:3px 10px;border-radius:20px;background:rgba(255,215,0,0.12);color:var(--gold);font-weight:700;white-space:nowrap;}
+.badge-pink{background:rgba(255,45,120,0.12);color:var(--pink);}
+.badge-cyan{background:rgba(0,229,255,0.12);color:var(--cyan);}
+.badge-green{background:rgba(0,230,118,0.12);color:var(--green);}
+.remove{color:var(--pink);cursor:pointer;font-size:18px;font-weight:700;padding:0 6px;opacity:0.7;}
+.remove:hover{opacity:1;}
+.grid-wrap{margin-top:10px;}
+.grid{display:grid;gap:8px;margin-top:8px;}
+.cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;text-align:center;font-size:11px;line-height:1.2;padding:5px;border-radius:var(--radius-sm);background:var(--bg-3);border:1.5px solid var(--line);color:var(--ink-faint);transition:all .25s cubic-bezier(.4,0,.2,1);cursor:default;position:relative;overflow:hidden;font-weight:500;}
+.cell.ready{opacity:1;border-color:var(--gold);box-shadow:0 0 12px var(--gold-glow);cursor:pointer;color:var(--ink);background:var(--bg-4);}
+.cell.ready:hover{transform:scale(1.04);border-color:var(--gold);}
+.cell.hit{opacity:1;cursor:pointer;background:linear-gradient(135deg,var(--pink),#c2185b);color:#fff;border-color:var(--pink);box-shadow:0 0 18px var(--pink-glow);transform:scale(1.03);animation:hitPulse 2s ease-in-out infinite;}
+@keyframes hitPulse{0%,100%{box-shadow:0 0 18px var(--pink-glow);}50%{box-shadow:0 0 28px var(--pink-glow),0 0 40px rgba(255,45,120,0.15);}}
+.cell.free{opacity:1;background:linear-gradient(135deg,var(--gold),#ff8f00);color:#1a0f00;font-weight:800;border-color:var(--gold);box-shadow:0 0 12px var(--gold-glow);}
+.bingo-banner{text-align:center;font-family:'Bebas Neue';font-size:42px;letter-spacing:5px;color:var(--gold);text-shadow:0 0 30px var(--gold-glow);margin:14px 0 6px;animation:bingoPop 0.6s cubic-bezier(.175,.885,.32,1.275);}
+@keyframes bingoPop{0%{transform:scale(0.3);opacity:0;}100%{transform:scale(1);opacity:1;}}
+.winner-banner{text-align:center;font-family:'Bebas Neue';font-size:48px;letter-spacing:4px;color:var(--gold);text-shadow:0 0 40px var(--gold-glow);margin:16px 0 6px;animation:winnerGlow 1.5s ease-in-out infinite;}
+@keyframes winnerGlow{0%,100%{text-shadow:0 0 30px var(--gold-glow);transform:scale(1);}50%{text-shadow:0 0 50px var(--gold-glow),0 0 80px rgba(255,215,0,0.2);transform:scale(1.03);}}
+.countdown-wrap{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(10,10,15,0.92);backdrop-filter:blur(20px);}
+.countdown-num{font-family:'Bebas Neue';font-size:140px;color:var(--gold);text-shadow:0 0 60px var(--gold-glow);animation:countPop 0.8s cubic-bezier(.175,.885,.32,1.275);}
+@keyframes countPop{0%{transform:scale(0);opacity:0;}60%{transform:scale(1.2);}100%{transform:scale(1);opacity:1;}}
+.countdown-label{font-size:14px;color:var(--ink-dim);letter-spacing:4px;text-transform:uppercase;margin-top:10px;}
+.now-playing{background:linear-gradient(135deg,rgba(255,45,120,0.08),rgba(168,85,247,0.08));border:1px solid rgba(255,45,120,0.15);border-radius:var(--radius);padding:16px;margin:14px 0;text-align:center;}
+.now-playing-label{font-size:10px;text-transform:uppercase;letter-spacing:2px;color:var(--pink);font-weight:700;}
+.now-playing-title{font-size:18px;font-weight:700;margin-top:6px;color:var(--ink);}
+.now-playing-artist{font-size:13px;color:var(--ink-dim);margin-top:2px;}
+.now-playing-bar{height:3px;background:var(--bg-3);border-radius:2px;margin-top:12px;overflow:hidden;}
+.now-playing-progress{height:100%;background:linear-gradient(90deg,var(--pink),var(--gold));border-radius:2px;transition:width 1s linear;}
+.progress-ring-wrap{display:flex;align-items:center;justify-content:center;margin:10px 0;}
+.progress-ring{position:relative;width:60px;height:60px;}
+.progress-ring svg{transform:rotate(-90deg);}
+.progress-ring-bg{fill:none;stroke:var(--bg-3);stroke-width:4;}
+.progress-ring-fill{fill:none;stroke:var(--gold);stroke-width:4;stroke-linecap:round;transition:stroke-dashoffset 1s linear;filter:drop-shadow(0 0 4px var(--gold-glow));}
+.progress-ring-text{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue';font-size:18px;color:var(--gold);}
+.claim-banner{background:linear-gradient(135deg,rgba(255,215,0,0.08),rgba(255,145,0,0.08));border:1px solid rgba(255,215,0,0.25);border-radius:var(--radius);padding:18px;text-align:center;margin-bottom:14px;animation:claimSlide 0.4s ease-out;}
+@keyframes claimSlide{from{transform:translateY(-20px);opacity:0;}to{transform:translateY(0);opacity:1;}}
+.claim-banner b{color:var(--gold);font-size:16px;}
+.claim-banner .claim-actions{display:flex;gap:10px;margin-top:12px;}
+.reject-banner{background:rgba(255,45,120,0.08);border:1px solid rgba(255,45,120,0.3);border-radius:var(--radius-sm);padding:12px;text-align:center;font-size:13px;margin-bottom:12px;color:var(--pink);font-weight:500;animation:shake 0.5s ease;}
+@keyframes shake{0%,100%{transform:translateX(0);}20%{transform:translateX(-8px);}40%{transform:translateX(8px);}60%{transform:translateX(-4px);}80%{transform:translateX(4px);}}
+.pill-wrap{text-align:center;margin:10px 0;}
+.pill{display:inline-block;background:var(--bg-3);color:var(--ink-dim);font-size:12px;font-weight:600;padding:5px 14px;border-radius:20px;border:1px solid var(--line);}
+.pill-pink{background:rgba(255,45,120,0.1);color:var(--pink);border-color:rgba(255,45,120,0.2);}
+.pill-gold{background:rgba(255,215,0,0.1);color:var(--gold);border-color:rgba(255,215,0,0.2);}
+.pill-cyan{background:rgba(0,229,255,0.1);color:var(--cyan);border-color:rgba(0,229,255,0.2);}
+.row2{display:flex;gap:10px;}
+.row2 > *{flex:1;}
+.row3{display:flex;gap:8px;}
+.row3 > *{flex:1;}
+.subtabs{display:flex;gap:5px;margin-bottom:14px;}
+.subtab{flex:1;text-align:center;padding:9px 0;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;color:var(--ink-dim);border:1px solid var(--line);transition:all .2s ease;}
+.subtab:hover{color:var(--ink);}
+.subtab.active{background:rgba(255,45,120,0.12);color:var(--pink);border-color:rgba(255,45,120,0.3);}
+.folder-card{background:var(--bg-3);border:1px solid var(--line);border-radius:var(--radius-sm);padding:14px;margin-bottom:10px;transition:all .2s ease;}
+.folder-card:hover{border-color:var(--line-strong);}
+.folder-head{display:flex;justify-content:space-between;align-items:center;}
+.folder-name{font-weight:700;font-size:14px;}
+.folder-count{font-size:12px;color:var(--ink-dim);}
+.folder-actions{display:flex;gap:6px;margin-top:10px;}
+.setting-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line);}
+.setting-row:last-child{border-bottom:none;}
+.setting-label{font-size:13px;font-weight:500;}
+.setting-desc{font-size:11px;color:var(--ink-faint);margin-top:2px;}
+.setting-control{display:flex;align-items:center;gap:8px;}
+.setting-control input[type="number"]{width:70px;background:var(--bg-3);border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:8px 10px;font-size:14px;text-align:center;}
+.setting-control select{background:var(--bg-3);border:1px solid var(--line);border-radius:8px;color:var(--ink);padding:8px 12px;font-size:13px;font-family:inherit;}
+.toggle{width:44px;height:24px;background:var(--bg-4);border-radius:12px;position:relative;cursor:pointer;transition:all .2s ease;border:1px solid var(--line);}
+.toggle.on{background:var(--pink);border-color:var(--pink);}
+.toggle-knob{width:18px;height:18px;background:#fff;border-radius:50%;position:absolute;top:2px;left:2px;transition:all .2s ease;box-shadow:0 1px 4px rgba(0,0,0,0.3);}
+.toggle.on .toggle-knob{left:22px;}
+.pattern-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px;}
+.pattern-item{background:var(--bg-3);border:1.5px solid var(--line);border-radius:var(--radius-sm);padding:12px 8px;text-align:center;cursor:pointer;transition:all .2s ease;}
+.pattern-item:hover{border-color:var(--ink-dim);}
+.pattern-item.selected{border-color:var(--pink);background:rgba(255,45,120,0.08);box-shadow:0 0 12px rgba(255,45,120,0.1);}
+.pattern-item .pattern-name{font-size:12px;font-weight:700;color:var(--ink);}
+.pattern-item .pattern-desc{font-size:10px;color:var(--ink-dim);margin-top:2px;}
+.lobby-players{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0;}
+.lobby-player{background:var(--bg-3);border:1px solid var(--line);border-radius:20px;padding:6px 14px;font-size:12px;font-weight:600;color:var(--ink);animation:playerJoin 0.3s ease;}
+@keyframes playerJoin{from{transform:scale(0.8);opacity:0;}to{transform:scale(1);opacity:1;}}
+.round-indicator{display:flex;align-items:center;justify-content:center;gap:6px;margin:10px 0;}
+.round-dot{width:10px;height:10px;border-radius:50%;background:var(--bg-4);border:1px solid var(--line);transition:all .3s ease;}
+.round-dot.active{background:var(--gold);border-color:var(--gold);box-shadow:0 0 8px var(--gold-glow);}
+.round-dot.completed{background:var(--green);border-color:var(--green);}
+.error{color:var(--pink);font-size:13px;margin-top:8px;text-align:center;font-weight:500;}
+.note{color:var(--ink-dim);font-size:12px;margin-top:10px;line-height:1.6;}
+.confetti-wrap{position:fixed;inset:0;pointer-events:none;z-index:200;overflow:hidden;}
+.confetti-piece{position:absolute;width:10px;height:10px;background:var(--gold);animation:confettiFall 3s ease-out forwards;}
+@keyframes confettiFall{0%{transform:translateY(-10vh) rotate(0deg);opacity:1;}100%{transform:translateY(110vh) rotate(720deg);opacity:0;}}
+::-webkit-scrollbar{width:6px;}
+::-webkit-scrollbar-track{background:var(--bg);}
+::-webkit-scrollbar-thumb{background:var(--bg-4);border-radius:3px;}
+::-webkit-scrollbar-thumb:hover{background:var(--ink-faint);}
+@media(min-width:768px){.app{max-width:560px;}.app-wide{max-width:1000px;}.logo{font-size:64px;}.cell{font-size:12.5px;}}
+.hidden{display:none !important;}
+.qr-wrap{text-align:center;}
+.qr-img{display:block;margin:10px auto;border-radius:var(--radius);background:#fff;padding:10px;}
+.screen-code{font-family:'Bebas Neue';font-size:80px;letter-spacing:16px;text-align:center;color:var(--gold);text-shadow:0 0 40px var(--gold-glow);}
+.screen-players{font-size:18px;color:var(--ink-dim);text-align:center;margin-top:8px;}
+.screen-now-playing{font-size:28px;font-weight:700;text-align:center;margin-top:20px;color:var(--ink);}
+.screen-artist{font-size:18px;color:var(--ink-dim);text-align:center;margin-top:4px;}
+.visualizer{display:flex;align-items:flex-end;justify-content:center;gap:3px;height:30px;margin:10px 0;}
+.visualizer-bar{width:4px;background:linear-gradient(to top,var(--pink),var(--gold));border-radius:2px;animation:vizBounce 0.5s ease-in-out infinite alternate;}
+@keyframes vizBounce{from{height:4px;}to{height:100%;}}
 </style>
 </head>
 <body>
-  <div class="mb-title">MUSIC BINGO</div>
-  <div class="mb-sub">ведущий включает — игроки отмечают с телефона</div>
-  <div class="mb-tabs">
-    <div class="mb-tab active" data-tab="host">Ведущий</div>
-    <div class="mb-tab" data-tab="join">Игрок</div>
-    <div class="mb-tab" data-tab="screen">Экран</div>
+<div class="bg-orb bg-orb-1"></div>
+<div class="bg-orb bg-orb-2"></div>
+<div class="bg-orb bg-orb-3"></div>
+<div class="particles" id="particles"></div>
+<div class="app" id="app">
+  <div class="logo-wrap">
+    <div class="logo">MUSIC BINGO</div>
+    <div class="logo-sub">Rockstar Edition</div>
   </div>
-  <div id="mb-view"></div>
-  <audio id="mb-audio" style="display:none;"></audio>
-
+  <div class="tabs" id="tabs">
+    <div class="tab active" data-tab="host"><span class="tab-icon">&#127908;</span>Vedushiy</div>
+    <div class="tab" data-tab="join"><span class="tab-icon">&#127918;</span>Igroki</div>
+    <div class="tab" data-tab="screen"><span class="tab-icon">&#128250;</span>Ekran</div>
+  </div>
+  <div id="view"></div>
+</div>
+<audio id="audio" style="display:none;"></audio>
 <script src="/socket.io/socket.io.js"></script>
 <script>
-(function(){
-  const socket = io();
-  const root = document.getElementById('mb-view');
-  const tabs = document.querySelectorAll('.mb-tab');
-  const audioEl = document.getElementById('mb-audio');
-  let audioUnlocked = false;
-
-  const LS_KEY = 'mb_session_v2';
-  function saveSession(obj){ try{ localStorage.setItem(LS_KEY, JSON.stringify(obj)); }catch(e){} }
-  function loadSession(){ try{ return JSON.parse(localStorage.getItem(LS_KEY)); }catch(e){ return null; } }
-  function clearSession(){ try{ localStorage.removeItem(LS_KEY); }catch(e){} }
-
-  function playCurrentSong(song){
-    if(!song || !song.url || !audioUnlocked) return;
-    audioEl.src = song.url;
-    audioEl.play().catch(()=>{});
-  }
-
-  const urlParams = new URLSearchParams(location.search);
-  const initialView = urlParams.get('view') || urlParams.get('tab'); // 'tab' kept for old QR links
-
-  function setActiveTab(name){
-    tabs.forEach(x => x.classList.toggle('active', x.dataset.tab === name));
-  }
-  function hostShareLink(){ return location.origin + '/?view=host'; }
-  function joinShareLink(code){ return location.origin + '/?view=join' + (code ? ('&code='+code) : ''); }
-
-  // ======================================================================
-  // HOST
-  // ======================================================================
-  function renderHost(){
-    root.innerHTML = `
-      <div class="mb-card" id="mb-host-setup">
-        <div class="mb-subtabs">
-          <div class="mb-subtab active" data-sub="library">Из библиотеки</div>
-          <div class="mb-subtab" data-sub="quick">Быстрый список</div>
-        </div>
-        <div id="mb-host-sub"></div>
-        <div class="mb-error" id="mb-host-error"></div>
-      </div>
-      <div class="mb-card" id="mb-host-game" style="display:none;"></div>
-    `;
-    document.querySelectorAll('.mb-subtab').forEach(t => t.onclick = () => {
-      document.querySelectorAll('.mb-subtab').forEach(x=>x.classList.remove('active'));
-      t.classList.add('active');
-      if(t.dataset.sub === 'library') drawLibrarySection(); else drawQuickSection();
-    });
-    drawLibrarySection();
-  }
-
-  function startGame(code, songs){
-    saveSession({ role:'host', code });
-    document.getElementById('mb-host-setup').style.display = 'none';
-    audioUnlocked = true;
-    audioEl.play().catch(()=>{});
-    renderHostGame(code, songs, { revealed: [], winner: null, playerCount: 0, pendingClaim: null });
-  }
-
-  function drawQuickSection(){
-    const box = document.getElementById('mb-host-sub');
-    box.innerHTML = `
-      <label class="mb-label">Список песен (одна на строку, минимум 9)</label>
-      <textarea class="mb-input" id="mb-manual" rows="8" placeholder="Queen — Bohemian Rhapsody"></textarea>
-      <button class="mb-btn mb-btn-primary" id="mb-quick-create">Создать игру</button>
-      <div class="mb-note">Без загрузки файлов — просто список названий, звук ведущий включает сам.</div>
-    `;
-    document.getElementById('mb-quick-create').onclick = () => {
-      const err = document.getElementById('mb-host-error');
-      err.textContent = '';
-      const raw = document.getElementById('mb-manual').value;
-      const songs = raw.split('\n').map(s=>s.trim()).filter(Boolean).map(title => ({ title, url: null }));
-      if(songs.length < 9){ err.textContent = 'Нужно минимум 9 песен.'; return; }
-      socket.emit('create_game', songs, (res) => {
-        if(res.error){ err.textContent = res.error; return; }
-        startGame(res.code, res.songs);
-      });
-    };
-  }
-
-  async function fetchLibrary(){
-    const res = await fetch('/api/library');
-    return res.json();
-  }
-
-  function drawLibrarySection(){
-    const box = document.getElementById('mb-host-sub');
-    box.innerHTML = `<div class="mb-note">Загрузка библиотеки...</div>`;
-    fetchLibrary().then(lib => renderLibraryList(lib)).catch(() => {
-      box.innerHTML = `<div class="mb-error">Не удалось загрузить библиотеку.</div>`;
-    });
-  }
-
-  function renderLibraryList(lib){
-    const box = document.getElementById('mb-host-sub');
-    const slugs = Object.keys(lib);
-    box.innerHTML = `
-      <div class="mb-row2" style="margin-bottom:14px;">
-        <input class="mb-input" id="mb-new-folder-name" placeholder="Название новой папки (например NEW YEAR)">
-        <button class="mb-btn mb-btn-ghost mb-btn-sm" id="mb-new-folder-btn" style="flex:0 0 auto;">+ Папка</button>
-      </div>
-      <div id="mb-folder-list">
-        ${slugs.length === 0 ? '<div class="mb-note">Папок пока нет — создайте первую.</div>' : ''}
-        ${slugs.map(slug => `
-          <div class="mb-folder-card" data-slug="${slug}">
-            <div class="mb-folder-head">
-              <span class="mb-folder-name">${lib[slug].name}</span>
-              <span class="mb-folder-count">${lib[slug].count} песен</span>
-            </div>
-            <div class="mb-folder-actions">
-              <button class="mb-btn mb-btn-primary mb-btn-sm mb-act-play" data-slug="${slug}" data-count="${lib[slug].count}">Создать игру</button>
-              <button class="mb-btn mb-btn-ghost mb-btn-sm mb-act-manage" data-slug="${slug}" data-name="${lib[slug].name}">Управлять</button>
-            </div>
-            <div class="mb-folder-expand" data-slug="${slug}" style="display:none; margin-top:12px;"></div>
-          </div>
-        `).join('')}
-      </div>
-    `;
-    document.getElementById('mb-new-folder-btn').onclick = async () => {
-      const name = document.getElementById('mb-new-folder-name').value.trim();
-      if(!name) return;
-      await fetch('/api/library/folder', {
-        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name })
-      });
-      drawLibrarySection();
-    };
-    box.querySelectorAll('.mb-act-play').forEach(btn => {
-      btn.onclick = () => showPlayPrompt(btn.dataset.slug, +btn.dataset.count);
-    });
-    box.querySelectorAll('.mb-act-manage').forEach(btn => {
-      btn.onclick = () => toggleManage(btn.dataset.slug, btn.dataset.name);
-    });
-  }
-
-  function showPlayPrompt(slug, count){
-    const card = document.querySelector(`.mb-folder-card[data-slug="${slug}"] .mb-folder-expand`);
-    card.style.display = 'block';
-    const defaultN = Math.min(20, count);
-    card.innerHTML = `
-      <label class="mb-label">Сколько песен взять (из ${count})</label>
-      <input class="mb-input" type="number" id="mb-count-${slug}" value="${defaultN}" min="9" max="${count}">
-      <button class="mb-btn mb-btn-primary mb-btn-sm" id="mb-start-${slug}" style="width:100%; margin-top:10px;">Начать игру</button>
-    `;
-    document.getElementById(`mb-start-${slug}`).onclick = () => {
-      const n = +document.getElementById(`mb-count-${slug}`).value || defaultN;
-      const err = document.getElementById('mb-host-error');
-      err.textContent = '';
-      socket.emit('create_game_from_folder', { slug, count: n }, (res) => {
-        if(res.error){ err.textContent = res.error; return; }
-        startGame(res.code, res.songs);
-      });
-    };
-  }
-
-  function toggleManage(slug, name){
-    const card = document.querySelector(`.mb-folder-card[data-slug="${slug}"] .mb-folder-expand`);
-    const isOpen = card.style.display === 'block' && card.dataset.mode === 'manage';
-    if(isOpen){ card.style.display = 'none'; return; }
-    card.dataset.mode = 'manage';
-    card.style.display = 'block';
-    card.innerHTML = `<div class="mb-note">Загрузка...</div>`;
-    fetch('/api/library/' + slug).then(r=>r.json()).then(data => {
-      card.innerHTML = `
-        <label class="mb-label">Загрузить mp3 в «${name}»</label>
-        <input type="file" id="mb-upload-${slug}" accept="audio/*" multiple class="mb-input" style="padding:8px;">
-        <div class="mb-note" id="mb-upload-status-${slug}"></div>
-        <div style="margin-top:10px; max-height:220px; overflow-y:auto;">
-          ${(data.songs||[]).map(s => `
-            <div class="mb-song-row">
-              <span>${s.title}</span>
-              <span class="mb-remove" data-slug="${slug}" data-url="${s.url}">✕</span>
-            </div>`).join('') || '<div class="mb-note">Пока нет песен.</div>'}
-        </div>
-        <button class="mb-btn mb-btn-danger mb-btn-sm" id="mb-delete-folder-${slug}" style="width:100%; margin-top:12px;">Удалить папку целиком</button>
-      `;
-      document.getElementById(`mb-upload-${slug}`).onchange = async (e) => {
-        const files = Array.from(e.target.files || []);
-        if(files.length === 0) return;
-        const status = document.getElementById(`mb-upload-status-${slug}`);
-        status.textContent = 'Загрузка ' + files.length + ' файлов...';
-        const fd = new FormData();
-        files.forEach(f => fd.append('songs', f));
-        fd.append('folderName', name);
-        await fetch('/api/library/' + slug + '/upload', { method:'POST', body: fd });
-        status.textContent = 'Готово.';
-        drawLibrarySection();
-      };
-      card.querySelectorAll('.mb-remove').forEach(el => {
-        el.onclick = async () => {
-          await fetch('/api/library/' + el.dataset.slug + '/song', {
-            method:'DELETE', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ url: el.dataset.url })
-          });
-          drawLibrarySection();
-        };
-      });
-      document.getElementById(`mb-delete-folder-${slug}`).onclick = async () => {
-        if(!confirm('Удалить папку «' + name + '» вместе со всеми песнями?')) return;
-        await fetch('/api/library/' + slug, { method:'DELETE' });
-        drawLibrarySection();
-      };
-    });
-  }
-
-  function renderHostGame(code, songs, initial){
-    const panel = document.getElementById('mb-host-game');
-    panel.style.display = 'block';
-    let revealed = initial.revealed || [];
-    let playerCount = initial.playerCount || 0;
-    let winner = initial.winner || null;
-    let pendingClaim = initial.pendingClaim || null;
-
-    function draw(){
-      const remaining = songs.filter(s => !revealed.includes(s.title));
-      const joinLink = joinShareLink(code);
-      panel.innerHTML = `
-        <div class="mb-code-hint">Код игры — сообщите игрокам:</div>
-        <div class="mb-code-display">${code}</div>
-        <div class="mb-share-row"><span>Ссылка игрокам:</span><input readonly value="${joinLink}" onclick="this.select()"></div>
-        <div class="mb-pill-wrap"><span class="mb-pill">Игроков онлайн: ${playerCount}</span></div>
-        ${winner ? `<div class="mb-winner-banner">🏆 ${winner}</div>` : ''}
-        ${(pendingClaim && !winner) ? `
-          <div class="mb-claim-banner">
-            <div><b>${pendingClaim.name}</b> заявляет BINGO!</div>
-            <button class="mb-btn mb-btn-gold" id="mb-verify">Проверить</button>
-          </div>` : ''}
-        <div class="mb-row2">
-          <button class="mb-btn mb-btn-primary" id="mb-next" ${remaining.length===0?'disabled':''}>Следующая песня</button>
-          <button class="mb-btn mb-btn-ghost" id="mb-reset">Сброс</button>
-        </div>
-        <button class="mb-btn mb-btn-danger" id="mb-leave">Завершить игру</button>
-        <div style="margin-top:16px;">
-          ${songs.map(s => `<div class="mb-song-row ${revealed.includes(s.title)?'revealed':''}">
-              <span>${s.title}${s.url?' 🔊':''}</span>${revealed.includes(s.title)?'<span class="mb-badge">прозвучала</span>':''}
-            </div>`).join('')}
-        </div>
-        <div class="mb-note">Прозвучало: ${revealed.length} / ${songs.length}</div>
-      `;
-      document.getElementById('mb-next').onclick = () => {
-        socket.emit('reveal_next', code, (res) => {
-          if(res.error) return;
-          revealed = res.revealed;
-          playCurrentSong(res.currentSong);
-          draw();
-        });
-      };
-      document.getElementById('mb-reset').onclick = () => {
-        if(!confirm('Сбросить все отметки для игры ' + code + '?')) return;
-        socket.emit('reset_game', code, () => { revealed = []; winner = null; pendingClaim = null; draw(); });
-      };
-      document.getElementById('mb-leave').onclick = () => {
-        if(!confirm('Завершить текущую игру? Код перестанет быть активным на этом экране.')) return;
-        clearSession();
-        location.href = location.pathname + '?view=host';
-      };
-      const verifyBtn = document.getElementById('mb-verify');
-      if(verifyBtn){
-        verifyBtn.onclick = () => {
-          socket.emit('verify_bingo', code, () => {});
-        };
-      }
-    }
-    draw();
-    socket.on('players_update', (data) => { playerCount = data.count; draw(); });
-    socket.on('winner_update', (data) => { winner = data.winner; pendingClaim = null; draw(); });
-    socket.on('bingo_claim', (data) => { pendingClaim = data; draw(); });
-    socket.on('bingo_claim_cleared', () => { pendingClaim = null; draw(); });
-    socket.on('game_update', (data) => { revealed = data.revealed; draw(); });
-  }
-
-  function resumeHost(code){
-    socket.emit('host_rejoin', code, (res) => {
-      if(res.error){ clearSession(); renderHost(); return; }
-      root.innerHTML = `<div class="mb-card" id="mb-host-setup" style="display:none;"></div><div class="mb-card" id="mb-host-game"></div>`;
-      renderHostGame(code, res.songs, {
-        revealed: res.revealed, winner: res.winner, playerCount: res.playerCount, pendingClaim: res.pendingClaim
-      });
-    });
-  }
-
-  function goHostTab(){
-    const session = loadSession();
-    if(session && session.role === 'host' && session.code){
-      root.innerHTML = `<div class="mb-card" id="mb-host-setup" style="display:none;"></div><div class="mb-card" id="mb-host-game"></div>`;
-      resumeHost(session.code);
-    } else {
-      renderHost();
-    }
-  }
-
-  // ======================================================================
-  // JOIN (player)
-  // ======================================================================
-  function renderJoin(){
-    const prefillCode = urlParams.get('code') || '';
-    root.innerHTML = `
-      <div class="mb-card">
-        <label class="mb-label">Ваше имя</label>
-        <input class="mb-input" id="mb-name-input" placeholder="Имя" style="margin-bottom:12px;">
-        <label class="mb-label">Код игры</label>
-        <input class="mb-input mb-code" id="mb-code-input" maxlength="4" value="${prefillCode}" placeholder="XXXX">
-        <button class="mb-btn mb-btn-primary" id="mb-join-btn" style="margin-top:14px;">Войти в игру</button>
-        <div class="mb-error" id="mb-join-error"></div>
-      </div>
-      <div class="mb-card" id="mb-join-game" style="display:none;"></div>
-    `;
-    document.getElementById('mb-join-btn').onclick = () => {
-      const code = document.getElementById('mb-code-input').value.trim().toUpperCase();
-      const name = document.getElementById('mb-name-input').value.trim() || 'Игрок';
-      doJoin(code, name);
-    };
-  }
-
-  function doJoin(code, name){
-    const err = document.getElementById('mb-join-error');
-    if(err) err.textContent = '';
-    if(code.length !== 4){ if(err) err.textContent = 'Код — 4 символа.'; return; }
-    socket.emit('join_game', code, name, (res) => {
-      if(res.error){
-        if(err) err.textContent = res.error;
-        clearSession();
-        return;
-      }
-      saveSession({ role:'player', code, name });
-      const firstCard = root.querySelector('.mb-card');
-      if(firstCard) firstCard.style.display = 'none';
-      if(!document.getElementById('mb-join-game')){
-        root.innerHTML = `<div class="mb-card" id="mb-join-game"></div>`;
-      }
-      startPlayerCard(code, name, res);
-    });
-  }
-
-  function goJoinTab(){
-    const session = loadSession();
-    if(session && session.role === 'player' && session.code){
-      root.innerHTML = `<div class="mb-card" id="mb-join-game"></div>`;
-      doJoin(session.code, session.name);
-    } else {
-      renderJoin();
-    }
-  }
-
-  function startPlayerCard(code, myName, initial){
-    const { cardTitles, size, freeIndex, totalSongs } = initial;
-    let marks = initial.marks;
-    let revealed = initial.revealed;
-    let winner = initial.winner;
-    let claimState = 'idle'; // idle | pending | rejected
-    const panel = document.getElementById('mb-join-game');
-    panel.style.display = 'block';
-
-    function checkBingoLocal(){
-      for(let r=0;r<size;r++){
-        let row=true, col=true;
-        for(let c=0;c<size;c++){
-          if(!marks[r*size+c]) row=false;
-          if(!marks[c*size+r]) col=false;
-        }
-        if(row||col) return true;
-      }
-      let d1=true, d2=true;
-      for(let i=0;i<size;i++){
-        if(!marks[i*size+i]) d1=false;
-        if(!marks[i*size+(size-1-i)]) d2=false;
-      }
-      return d1||d2;
-    }
-
-    function draw(){
-      const revealedSet = new Set(revealed);
-      const bingo = checkBingoLocal();
-      panel.innerHTML = `
-        ${winner ? `<div class="mb-winner-banner">🏆 ${winner}</div>` : (bingo && claimState==='idle' ? '<div class="mb-bingo-banner">БИНГО! 🎉</div>' : '')}
-        ${claimState === 'rejected' ? '<div class="mb-reject-banner">Не подтвердилось — проверьте карточку и играйте дальше.</div>' : ''}
-        ${claimState === 'pending' ? '<div class="mb-note" style="text-align:center;">Ведущий проверяет вашу заявку...</div>' : ''}
-        <div class="mb-code-hint">Код игры: ${code} · прозвучало ${revealed.length} / ${totalSongs}</div>
-        <div class="mb-grid" style="grid-template-columns:repeat(${size},1fr);">
-          ${cardTitles.map((title,i)=>{
-            let cls = 'mb-cell';
-            if(i === freeIndex) cls += ' free';
-            else if(marks[i]) cls += ' hit';
-            else if(revealedSet.has(title)) cls += ' ready';
-            return `<div class="${cls}" data-i="${i}">${i===freeIndex?'★':title}</div>`;
-          }).join('')}
-        </div>
-        ${(bingo && !winner && claimState==='idle') ? `<button class="mb-btn mb-btn-gold" id="mb-claim">Заявить BINGO!</button>` : ''}
-        <button class="mb-btn mb-btn-danger" id="mb-leave-player">Покинуть игру</button>
-        <div class="mb-note">Нажимайте на прозвучавшие песни (с золотой рамкой), чтобы отметить их на карточке. Повторный клик — снять отметку.</div>
-      `;
-      panel.querySelectorAll('.mb-cell').forEach(el => {
-        const i = +el.dataset.i;
-        if(i === freeIndex) return;
-        el.onclick = () => {
-          if(!(marks[i] || revealedSet.has(cardTitles[i]))) return; // not revealed yet, ignore
-          marks[i] = !marks[i];
-          socket.emit('toggle_mark', code, i);
-          draw();
-        };
-      });
-      const claimBtn = document.getElementById('mb-claim');
-      if(claimBtn){
-        claimBtn.onclick = () => {
-          if(!confirm('Вы уверены, что хотите заявить BINGO?')) return;
-          claimState = 'pending';
-          socket.emit('claim_bingo', code);
-          draw();
-        };
-      }
-      document.getElementById('mb-leave-player').onclick = () => {
-        clearSession();
-        location.href = location.pathname + '?view=join';
-      };
-    }
-    draw();
-    socket.on('game_update', (data) => { revealed = data.revealed; draw(); });
-    socket.on('winner_update', (data) => { winner = data.winner; claimState = 'idle'; draw(); });
-    socket.on('mark_update', (data) => { marks = data.marks; draw(); });
-    socket.on('bingo_rejected', () => { claimState = 'rejected'; draw(); setTimeout(() => { claimState='idle'; draw(); }, 4000); });
-  }
-
-  // ======================================================================
-  // SCREEN (TV)
-  // ======================================================================
-  function renderScreen(){
-    const prefillCode = urlParams.get('code') || '';
-    root.innerHTML = `
-      <div class="mb-card" id="mb-screen-setup">
-        <label class="mb-label">Код игры</label>
-        <input class="mb-input mb-code" id="mb-screen-code" maxlength="4" value="${prefillCode}" placeholder="XXXX">
-        <button class="mb-btn mb-btn-primary" id="mb-screen-go">Показать</button>
-        <div class="mb-error" id="mb-screen-error"></div>
-      </div>
-      <div id="mb-screen-view" style="display:none;"></div>
-    `;
-    document.getElementById('mb-screen-go').onclick = () => {
-      const code = document.getElementById('mb-screen-code').value.trim().toUpperCase();
-      goScreen(code);
-    };
-  }
-
-  function goScreen(code){
-    const err = document.getElementById('mb-screen-error');
-    if(code.length !== 4){ if(err) err.textContent = 'Код — 4 символа.'; return; }
-    socket.emit('join_game', code, '__screen__', (res) => {
-      if(res.error){ if(err) err.textContent = res.error; clearSession(); return; }
-      saveSession({ role:'screen', code });
-      const setup = document.getElementById('mb-screen-setup');
-      if(setup) setup.style.display = 'none';
-      if(!document.getElementById('mb-screen-view')){
-        root.innerHTML = `<div id="mb-screen-view"></div>`;
-      }
-      showScreen(code, res.winner);
-    });
-  }
-
-  function goScreenTab(){
-    const session = loadSession();
-    if(session && session.role === 'screen' && session.code){
-      root.innerHTML = `<div id="mb-screen-view"></div>`;
-      goScreen(session.code);
-    } else {
-      renderScreen();
-    }
-  }
-
-  function showScreen(code, initialWinner){
-    const view = document.getElementById('mb-screen-view');
-    view.style.display = 'block';
-    const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=' + encodeURIComponent(joinShareLink(code));
-    let playerCount = 0;
-    let winner = initialWinner;
-    let lastSong = null;
-    let unlocked = false;
-
-    function draw(){
-      view.innerHTML = `
-        <div class="mb-card">
-          <img class="mb-qr" src="${qrUrl}" width="240" height="240" alt="QR">
-          <div class="mb-screen-code">${code}</div>
-          <div class="mb-pill-wrap"><span class="mb-pill">Игроков онлайн: ${playerCount}</span></div>
-          ${winner ? `<div class="mb-winner-banner">🏆 ${winner}</div>` : (lastSong ? `<div class="mb-now-playing">Сейчас играет: ${lastSong}</div>` : '')}
-          ${!unlocked ? `<button class="mb-btn mb-btn-ghost" id="mb-enable-sound">Включить звук на этом экране</button>` : ''}
-        </div>
-      `;
-      const soundBtn = document.getElementById('mb-enable-sound');
-      if(soundBtn){
-        soundBtn.onclick = () => { unlocked = true; audioUnlocked = true; audioEl.play().catch(()=>{}); draw(); };
-      }
-    }
-    draw();
-    socket.on('players_update', (data) => { playerCount = data.count; draw(); });
-    socket.on('winner_update', (data) => { winner = data.winner; draw(); });
-    socket.on('game_update', (data) => {
-      lastSong = data.currentSong ? data.currentSong.title : lastSong;
-      if(unlocked) playCurrentSong(data.currentSong);
-      draw();
-    });
-  }
-
-  // ======================================================================
-  // Tab wiring + startup
-  // ======================================================================
-  tabs.forEach(t => t.addEventListener('click', () => {
-    setActiveTab(t.dataset.tab);
-    const tab = t.dataset.tab;
-    if(tab==='host') goHostTab();
-    else if(tab==='join') goJoinTab();
-    else goScreenTab();
-  }));
-
-  const session = loadSession();
-  if(initialView === 'join'){
-    setActiveTab('join'); goJoinTab();
-  } else if(initialView === 'screen'){
-    setActiveTab('screen'); goScreenTab();
-  } else if(initialView === 'host'){
-    setActiveTab('host'); goHostTab();
-  } else if(session && session.role === 'host'){
-    setActiveTab('host'); goHostTab();
-  } else if(session && session.role === 'player'){
-    setActiveTab('join'); goJoinTab();
-  } else if(session && session.role === 'screen'){
-    setActiveTab('screen'); goScreenTab();
-  } else {
-    renderHost();
-  }
-})();
-</script>
-</body>
-</html>
