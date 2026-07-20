@@ -49,10 +49,9 @@ const upload = multer({
       cb(null, safe);
     }
   }),
-  limits: { fileSize: 25 * 1024 * 1024 } // 25MB per file
+  limits: { fileSize: 25 * 1024 * 1024 }
 });
 
-// List folders with song counts: { slug: { name, count } }
 app.get('/api/library', (req, res) => {
   const lib = loadLibrary();
   const out = {};
@@ -60,7 +59,6 @@ app.get('/api/library', (req, res) => {
   res.json(out);
 });
 
-// Full song list for one folder
 app.get('/api/library/:slug', (req, res) => {
   const lib = loadLibrary();
   const folder = lib[req.params.slug];
@@ -68,7 +66,6 @@ app.get('/api/library/:slug', (req, res) => {
   res.json({ name: folder.name, songs: folder.songs });
 });
 
-// Create a new (empty) folder
 app.post('/api/library/folder', (req, res) => {
   const name = (req.body.name || '').trim();
   if (!name) return res.status(400).json({ error: 'Укажите название папки.' });
@@ -79,7 +76,6 @@ app.post('/api/library/folder', (req, res) => {
   res.json({ slug, name: lib[slug].name });
 });
 
-// Upload mp3s into a folder (creates the folder if it doesn't exist)
 app.post('/api/library/:slug/upload', upload.array('songs', 200), (req, res) => {
   const slug = req.params.slug;
   const lib = loadLibrary();
@@ -93,7 +89,6 @@ app.post('/api/library/:slug/upload', upload.array('songs', 200), (req, res) => 
   res.json({ added, total: lib[slug].songs.length });
 });
 
-// Delete a single song from a folder (and its file)
 app.delete('/api/library/:slug/song', (req, res) => {
   const { url } = req.body;
   const lib = loadLibrary();
@@ -108,7 +103,6 @@ app.delete('/api/library/:slug/song', (req, res) => {
   res.json({ ok: true });
 });
 
-// Delete an entire folder
 app.delete('/api/library/:slug', (req, res) => {
   const lib = loadLibrary();
   if (!lib[req.params.slug]) return res.status(404).json({ error: 'Папка не найдена.' });
@@ -119,7 +113,11 @@ app.delete('/api/library/:slug', (req, res) => {
 });
 
 // ---------- Live games (in-memory, ephemeral) ----------
-// code -> { songs: [{title,url}], revealed: string[], players: Map(socketId->name), winner, createdAt }
+// code -> {
+//   songs: [{title,url}], revealed: string[],
+//   players: Map(socketId -> {name, cardTitles, marks, size, freeIndex}),
+//   winner, pendingClaim: {socketId, name} | null, createdAt
+// }
 const games = new Map();
 
 setInterval(() => {
@@ -130,7 +128,7 @@ setInterval(() => {
 }, 60 * 60 * 1000);
 
 function genCode() {
-  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // no O/0/I/1
+  const chars = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
   let c = '';
   for (let i = 0; i < 4; i++) c += chars[Math.floor(Math.random() * chars.length)];
   return games.has(c) ? genCode() : c;
@@ -143,13 +141,45 @@ function shuffle(arr) {
   }
   return a;
 }
+function gridSizeFor(n) {
+  if (n >= 24) return 5;
+  if (n >= 16) return 4;
+  if (n >= 9) return 3;
+  return 0;
+}
 function playersPayload(game) {
-  return { count: game.players.size, names: Array.from(game.players.values()) };
+  return {
+    count: game.players.size,
+    names: Array.from(game.players.values()).map((p) => p.name)
+  };
 }
 function newGame(songs) {
   const code = genCode();
-  games.set(code, { songs, revealed: [], players: new Map(), winner: null, createdAt: Date.now() });
+  games.set(code, {
+    songs,
+    revealed: [],
+    players: new Map(),
+    winner: null,
+    pendingClaim: null,
+    createdAt: Date.now()
+  });
   return code;
+}
+function checkBingoServer(marks, size) {
+  for (let r = 0; r < size; r++) {
+    let row = true, col = true;
+    for (let c = 0; c < size; c++) {
+      if (!marks[r * size + c]) row = false;
+      if (!marks[c * size + r]) col = false;
+    }
+    if (row || col) return true;
+  }
+  let d1 = true, d2 = true;
+  for (let i = 0; i < size; i++) {
+    if (!marks[i * size + i]) d1 = false;
+    if (!marks[i * size + (size - 1 - i)]) d2 = false;
+  }
+  return d1 || d2;
 }
 
 io.on('connection', (socket) => {
@@ -178,16 +208,56 @@ io.on('connection', (socket) => {
     const game = games.get(code);
     if (!game) return cb({ error: 'Игра не найдена (возможно, истекла).' });
     socket.join(code);
-    cb({ songs: game.songs, revealed: game.revealed, winner: game.winner, playerCount: game.players.size });
+    cb({
+      songs: game.songs,
+      revealed: game.revealed,
+      winner: game.winner,
+      playerCount: game.players.size,
+      pendingClaim: game.pendingClaim ? { name: game.pendingClaim.name } : null
+    });
   });
 
   socket.on('join_game', (code, name, cb) => {
     const game = games.get(code);
     if (!game) return cb({ error: 'Игра с таким кодом не найдена.' });
+    const size = gridSizeFor(game.songs.length);
+    if (size === 0) return cb({ error: 'В этой игре пока маловато песен для карточки.' });
     socket.join(code);
-    game.players.set(socket.id, (name || 'Игрок').slice(0, 30));
+
+    const total = size * size;
+    const freeIndex = size % 2 === 1 ? Math.floor(total / 2) : -1;
+    let player = game.players.get(socket.id);
+    if (!player) {
+      const cardTitles = shuffle(game.songs.map((s) => s.title)).slice(0, total);
+      const marks = new Array(total).fill(false);
+      if (freeIndex >= 0) marks[freeIndex] = true;
+      player = { name: (name || 'Игрок').slice(0, 30), cardTitles, marks, size, freeIndex };
+      game.players.set(socket.id, player);
+    } else if (name) {
+      player.name = name.slice(0, 30);
+    }
     io.to(code).emit('players_update', playersPayload(game));
-    cb({ songs: game.songs.map((s) => s.title), revealed: game.revealed, winner: game.winner });
+    cb({
+      cardTitles: player.cardTitles,
+      marks: player.marks,
+      size: player.size,
+      freeIndex: player.freeIndex,
+      revealed: game.revealed,
+      winner: game.winner,
+      totalSongs: game.songs.length
+    });
+  });
+
+  socket.on('toggle_mark', (code, index) => {
+    const game = games.get(code);
+    if (!game || game.winner) return;
+    const player = game.players.get(socket.id);
+    if (!player) return;
+    if (index === player.freeIndex || index < 0 || index >= player.cardTitles.length) return;
+    const title = player.cardTitles[index];
+    if (!game.revealed.includes(title)) return; // can only mark songs that have actually played
+    player.marks[index] = !player.marks[index];
+    socket.emit('mark_update', { marks: player.marks });
   });
 
   socket.on('reveal_next', (code, cb) => {
@@ -206,22 +276,52 @@ io.on('connection', (socket) => {
     if (!game) return cb && cb({ error: 'Игра не найдена.' });
     game.revealed = [];
     game.winner = null;
+    game.pendingClaim = null;
+    for (const player of game.players.values()) {
+      player.marks = new Array(player.cardTitles.length).fill(false);
+      if (player.freeIndex >= 0) player.marks[player.freeIndex] = true;
+    }
     io.to(code).emit('game_update', { revealed: [], currentSong: null });
     io.to(code).emit('winner_update', { winner: null });
+    io.to(code).emit('bingo_claim_cleared', {});
     cb && cb({ ok: true });
   });
 
-  socket.on('claim_bingo', (code, name) => {
+  // Player calls bingo -> host gets a verify prompt -> auto-checked when host confirms
+  socket.on('claim_bingo', (code) => {
     const game = games.get(code);
-    if (!game || game.winner) return;
-    game.winner = name || 'Игрок';
-    io.to(code).emit('winner_update', { winner: game.winner });
+    if (!game || game.winner || game.pendingClaim) return;
+    const player = game.players.get(socket.id);
+    if (!player) return;
+    game.pendingClaim = { socketId: socket.id, name: player.name };
+    io.to(code).emit('bingo_claim', { name: player.name });
+  });
+
+  socket.on('verify_bingo', (code, cb) => {
+    const game = games.get(code);
+    if (!game || !game.pendingClaim) return cb && cb({ error: 'Нет активной заявки.' });
+    const claim = game.pendingClaim;
+    const player = game.players.get(claim.socketId);
+    const valid = player ? checkBingoServer(player.marks, player.size) : false;
+    game.pendingClaim = null;
+    if (valid) {
+      game.winner = claim.name;
+      io.to(code).emit('winner_update', { winner: game.winner });
+    } else {
+      io.to(code).emit('bingo_claim_cleared', {});
+      io.to(claim.socketId).emit('bingo_rejected', {});
+    }
+    cb && cb({ ok: true, valid });
   });
 
   socket.on('disconnect', () => {
     for (const [code, game] of games.entries()) {
       if (game.players.delete(socket.id)) {
         io.to(code).emit('players_update', playersPayload(game));
+      }
+      if (game.pendingClaim && game.pendingClaim.socketId === socket.id) {
+        game.pendingClaim = null;
+        io.to(code).emit('bingo_claim_cleared', {});
       }
     }
   });
