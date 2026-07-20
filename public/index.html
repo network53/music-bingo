@@ -172,6 +172,7 @@ textarea.input{resize:vertical;min-height:100px;}
 .visualizer-bar{width:4px;background:linear-gradient(to top,var(--pink),var(--gold));border-radius:2px;animation:vizBounce 0.5s ease-in-out infinite alternate;}
 @keyframes vizBounce{from{height:4px;}to{height:100%;}}
 </style>
+<base target="_blank">
 </head>
 <body>
 <div class="bg-orb bg-orb-1"></div>
@@ -193,3 +194,554 @@ textarea.input{resize:vertical;min-height:100px;}
 <audio id="audio" style="display:none;"></audio>
 <script src="/socket.io/socket.io.js"></script>
 <script>
+// ===== UTILS =====
+const socket = io({ transports: ['websocket', 'polling'] });
+const root = document.getElementById('view');
+const audioEl = document.getElementById('audio');
+let audioUnlocked = false;
+
+function unlockAudio(){ audioUnlocked = true; audioEl.play().catch(function(){}); }
+function playSong(song){
+  if(!song || !song.url || !audioUnlocked) return;
+  audioEl.src = song.url;
+  if(song.startMs) audioEl.currentTime = song.startMs / 1000;
+  audioEl.play().catch(function(){});
+}
+function stopAudio(){ audioEl.pause(); audioEl.currentTime = 0; }
+function pauseAudio(){ audioEl.pause(); }
+function resumeAudio(){ audioEl.play().catch(function(){}); }
+
+// ===== TOAST =====
+function toast(msg, type){
+  type = type || 'info';
+  var colors = {info:'#00e5ff', success:'#00e676', error:'#ff2d78', warn:'#ff9100'};
+  var t = document.createElement('div');
+  t.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#12121a;border:1px solid '+(colors[type]||colors.info)+';color:#f0f0f5;padding:12px 24px;border-radius:12px;font-size:13px;font-weight:600;z-index:300;box-shadow:0 4px 20px rgba(0,0,0,0.3);';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(function(){ t.style.opacity='0'; t.style.transition='opacity 0.3s'; setTimeout(function(){t.remove();},300); }, 2500);
+}
+
+// ===== CONFETTI =====
+function fireConfetti(){
+  var wrap = document.createElement('div');
+  wrap.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:200;overflow:hidden;';
+  var colors = ['#ffd700','#ff2d78','#00e5ff','#a855f7','#00e676','#ff9100'];
+  for(var i=0;i<60;i++){
+    var p = document.createElement('div');
+    p.style.cssText = 'position:absolute;width:10px;height:10px;background:'+colors[Math.floor(Math.random()*colors.length)]+';animation:confettiFall 3s ease-out forwards;left:'+Math.random()*100+'%;animation-delay:'+Math.random()+'s;';
+    wrap.appendChild(p);
+  }
+  document.body.appendChild(wrap);
+  setTimeout(function(){wrap.remove();}, 4000);
+}
+
+// ===== COUNTDOWN =====
+function showCountdown(num){
+  var existing = document.getElementById('cd-overlay');
+  if(existing) existing.remove();
+  var wrap = document.createElement('div');
+  wrap.id = 'cd-overlay';
+  wrap.style.cssText = 'position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(10,10,15,0.92);backdrop-filter:blur(20px);';
+  wrap.innerHTML = '<div style="font-family:Bebas Neue;font-size:140px;color:#ffd700;text-shadow:0 0 60px rgba(255,215,0,0.35);animation:countPop 0.8s ease;" id="cd-num">'+num+'</div><div style="font-size:14px;color:#8a8aa0;letter-spacing:4px;text-transform:uppercase;margin-top:10px;">Get Ready!</div>';
+  document.body.appendChild(wrap);
+  var current = num;
+  var interval = setInterval(function(){
+    current--;
+    var el = document.getElementById('cd-num');
+    if(!el){ clearInterval(interval); return; }
+    if(current > 0){ el.textContent = current; el.style.animation = 'none'; el.offsetHeight; el.style.animation = 'countPop 0.8s ease'; }
+    else { el.textContent = 'GO!'; el.style.color = '#00e676'; clearInterval(interval); setTimeout(function(){wrap.remove();}, 800); }
+  }, 1000);
+}
+
+// ===== PATTERNS =====
+var PATTERNS = {
+  '1line': {name:'1 Line', desc:'One line'},
+  '2lines': {name:'2 Lines', desc:'Two lines'},
+  '3lines': {name:'3 Lines', desc:'Three lines'},
+  '4lines': {name:'4 Lines', desc:'Four lines'},
+  'fullhouse': {name:'Full House', desc:'Full card'},
+  'corners': {name:'4 Corners', desc:'Four corners'},
+  'cross': {name:'Cross', desc:'Cross shape'},
+  'outer': {name:'Outer Frame', desc:'Outer border'},
+  'letterX': {name:'Letter X', desc:'Diagonal X'}
+};
+
+// ===== SESSION =====
+var LS_KEY = 'mb_rockstar_v2';
+function saveSession(obj){ try{ localStorage.setItem(LS_KEY, JSON.stringify(obj)); }catch(e){} }
+function loadSession(){ try{ return JSON.parse(localStorage.getItem(LS_KEY)); }catch(e){ return null; } }
+function clearSession(){ try{ localStorage.removeItem(LS_KEY); }catch(e){} }
+
+// ===== TABS =====
+var tabs = document.querySelectorAll('.tab');
+function setActiveTab(name){
+  tabs.forEach(function(t){ t.classList.toggle('active', t.dataset.tab === name); });
+}
+tabs.forEach(function(t){ t.addEventListener('click', function(){
+  setActiveTab(t.dataset.tab);
+  if(t.dataset.tab === 'host') goHost();
+  else if(t.dataset.tab === 'join') goJoin();
+  else goScreen();
+}); });
+
+// ===== HOST =====
+function goHost(){
+  var session = loadSession();
+  if(session && session.role === 'host' && session.code){
+    socket.emit('host_rejoin', session.code, function(res){
+      if(res.error){ clearSession(); renderHostSetup(); return; }
+      renderHostGame(res.code, res.songs, res.settings, res);
+    });
+  } else { renderHostSetup(); }
+}
+
+function renderHostSetup(){
+  root.innerHTML = '<div class="card" id="host-setup"><div class="subtabs"><div class="subtab active" data-sub="lib">Library</div><div class="subtab" data-sub="quick">Quick</div></div><div id="host-sub"></div><div class="error" id="host-error"></div></div><div class="card hidden" id="host-lobby"></div><div class="card hidden" id="host-game"></div>';
+  document.querySelectorAll('.subtab').forEach(function(t){ t.onclick = function(){
+    document.querySelectorAll('.subtab').forEach(function(x){ x.classList.remove('active'); });
+    t.classList.add('active');
+    t.dataset.sub === 'lib' ? drawLibrary() : drawQuick();
+  }; });
+  drawLibrary();
+}
+
+function drawQuick(){
+  var box = document.getElementById('host-sub');
+  box.innerHTML = '<label class="label">Songs (one per line, min 9)</label><textarea class="input" id="manual" rows="8" placeholder="Artist - Song Title"></textarea><button class="btn btn-pink" style="margin-top:12px;" id="q-create">Create Game</button>';
+  document.getElementById('q-create').onclick = function(){
+    var raw = document.getElementById('manual').value;
+    var songs = raw.split('\n').map(function(s){ return s.trim(); }).filter(Boolean).map(function(t){ return {title: t, artist: '', url: null, duration: 0}; });
+    if(songs.length < 9){ document.getElementById('host-error').textContent = 'Minimum 9 songs'; return; }
+    showGameSettings(songs, 'quick');
+  };
+}
+
+function fetchLibrary(){
+  return fetch('/api/library').then(function(r){ return r.json(); });
+}
+
+function drawLibrary(){
+  var box = document.getElementById('host-sub');
+  box.innerHTML = '<div class="note" style="text-align:center;padding:20px;">Loading...</div>';
+  fetchLibrary().then(function(lib){
+    var slugs = Object.keys(lib);
+    var html = '<div class="row2" style="margin-bottom:14px;"><input class="input" id="nf-name" placeholder="New folder name"><button class="btn btn-ghost btn-sm" style="flex:0 0 auto;" id="nf-btn">+ Folder</button></div><div id="flist">';
+    if(slugs.length === 0) html += '<div class="note" style="text-align:center;padding:20px;">No folders yet.</div>';
+    slugs.forEach(function(slug){
+      html += '<div class="folder-card" data-slug="'+slug+'"><div class="folder-head"><span class="folder-name">'+lib[slug].name+'</span><span class="folder-count">'+lib[slug].count+' songs</span></div><div class="folder-actions"><button class="btn btn-pink btn-sm mb-play" data-slug="'+slug+'" data-count="'+lib[slug].count+'">Create Game</button><button class="btn btn-ghost btn-sm mb-manage" data-slug="'+slug+'" data-name="'+lib[slug].name+'">Manage</button></div><div class="folder-expand" style="display:none;margin-top:12px;"></div></div>';
+    });
+    html += '</div>';
+    box.innerHTML = html;
+    document.getElementById('nf-btn').onclick = function(){
+      var name = document.getElementById('nf-name').value.trim();
+      if(!name) return;
+      fetch('/api/library/folder', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:name})}).then(function(){ drawLibrary(); });
+    };
+    box.querySelectorAll('.mb-play').forEach(function(btn){
+      btn.onclick = function(){
+        var card = btn.closest('.folder-card').querySelector('.folder-expand');
+        card.style.display = 'block';
+        var count = +btn.dataset.count;
+        var defaultN = Math.min(25, count);
+        card.innerHTML = '<label class="label">How many songs (from '+count+')</label><input class="input" type="number" id="c-'+btn.dataset.slug+'" value="'+defaultN+'" min="9" max="'+count+'"><button class="btn btn-pink btn-sm" style="width:100%;margin-top:10px;" id="s-'+btn.dataset.slug+'">Next: Settings</button>';
+        document.getElementById('s-'+btn.dataset.slug).onclick = function(){
+          var n = +document.getElementById('c-'+btn.dataset.slug).value || defaultN;
+          fetch('/api/library/'+btn.dataset.slug).then(function(r){ return r.json(); }).then(function(data){
+            showGameSettings(data.songs.slice(0, n), 'library');
+          });
+        };
+      };
+    });
+    box.querySelectorAll('.mb-manage').forEach(function(btn){
+      btn.onclick = function(){
+        var card = btn.closest('.folder-card').querySelector('.folder-expand');
+        card.style.display = 'block';
+        fetch('/api/library/'+btn.dataset.slug).then(function(r){ return r.json(); }).then(function(data){
+          var h = '<label class="label">Upload MP3 to '+btn.dataset.name+'</label><input type="file" accept="audio/*" multiple class="input" style="padding:8px;" id="up-'+btn.dataset.slug+'"><div style="margin-top:10px;max-height:260px;overflow-y:auto;">';
+          data.songs.forEach(function(s){
+            h += '<div class="song-row"><div class="song-info"><div class="song-title">'+s.title+'</div></div><span class="remove" data-url="'+s.url+'">x</span></div>';
+          });
+          h += '</div><button class="btn btn-danger btn-sm" style="width:100%;margin-top:12px;" id="del-'+btn.dataset.slug+'">Delete Folder</button>';
+          card.innerHTML = h;
+          document.getElementById('up-'+btn.dataset.slug).onchange = function(e){
+            var files = Array.from(e.target.files || []);
+            if(!files.length) return;
+            var fd = new FormData();
+            files.forEach(function(f){ fd.append('songs', f); });
+            fd.append('folderName', btn.dataset.name);
+            fetch('/api/library/'+btn.dataset.slug+'/upload', {method:'POST', body: fd}).then(function(){ drawLibrary(); });
+          };
+          card.querySelectorAll('.remove').forEach(function(r){
+            r.onclick = function(){
+              fetch('/api/library/'+btn.dataset.slug+'/song', {method:'DELETE', headers:{'Content-Type':'application/json'}, body:JSON.stringify({url: r.dataset.url})}).then(function(){ btn.onclick(); });
+            };
+          });
+          document.getElementById('del-'+btn.dataset.slug).onclick = function(){
+            if(!confirm('Delete?')) return;
+            fetch('/api/library/'+btn.dataset.slug, {method:'DELETE'}).then(function(){ drawLibrary(); });
+          };
+        });
+      };
+    });
+  });
+}
+
+function showGameSettings(songs, source){
+  var setup = document.getElementById('host-setup');
+  var size = Math.min(7, Math.max(3, Math.floor(Math.sqrt(songs.length))));
+  setup.innerHTML = '<div class="title-md" style="text-align:center;margin-bottom:16px;">Game Settings</div>'+
+    '<div class="setting-row"><div><div class="setting-label">Card Size</div><div class="setting-desc">'+size+'x'+size+' = '+(size*size)+' cells</div></div><div class="setting-control"><input type="number" id="set-size" value="'+size+'" min="3" max="7"></div></div>'+
+    '<div class="setting-row"><div><div class="setting-label">Target Pattern</div></div></div>'+
+    '<div class="pattern-grid" id="pg"></div>'+
+    '<div class="setting-row" style="margin-top:14px;"><div><div class="setting-label">Snippet Duration</div></div><div class="setting-control"><input type="number" id="set-snippet" value="30" min="5" max="300"> sec</div></div>'+
+    '<div class="setting-row"><div><div class="setting-label">Gap Between Songs</div></div><div class="setting-control"><input type="number" id="set-gap" value="5" min="0" max="60"> sec</div></div>'+
+    '<div class="setting-row"><div><div class="setting-label">Autoplay</div></div><div class="setting-control" id="ap-wrap"></div></div>'+
+    '<div class="setting-row"><div><div class="setting-label">Rounds</div></div><div class="setting-control"><input type="number" id="set-rounds" value="1" min="1" max="10"></div></div>'+
+    '<div class="row2" style="margin-top:16px;"><button class="btn btn-ghost" id="set-back">Back</button><button class="btn btn-pink" id="set-create">Create Lobby</button></div>'+
+    '<div class="error" id="set-err"></div>';
+
+  var pg = document.getElementById('pg');
+  var selectedPattern = '1line';
+  Object.entries(PATTERNS).forEach(function(entry){
+    var id = entry[0], p = entry[1];
+    var div = document.createElement('div');
+    div.className = 'pattern-item' + (id === selectedPattern ? ' selected' : '');
+    div.innerHTML = '<div class="pattern-name">'+p.name+'</div><div class="pattern-desc">'+p.desc+'</div>';
+    div.onclick = function(){ pg.querySelectorAll('.pattern-item').forEach(function(x){ x.classList.remove('selected'); }); div.classList.add('selected'); selectedPattern = id; };
+    pg.appendChild(div);
+  });
+
+  var autoplay = true;
+  var toggle = document.createElement('div');
+  toggle.className = 'toggle on';
+  toggle.innerHTML = '<div class="toggle-knob"></div>';
+  toggle.onclick = function(){ autoplay = !autoplay; toggle.classList.toggle('on'); };
+  document.getElementById('ap-wrap').appendChild(toggle);
+
+  document.getElementById('set-back').onclick = function(){ source === 'quick' ? renderHostSetup() : drawLibrary(); };
+  document.getElementById('set-create').onclick = function(){
+    var err = document.getElementById('set-err');
+    err.textContent = '';
+    var cardSize = +document.getElementById('set-size').value;
+    var snippetSeconds = +document.getElementById('set-snippet').value;
+    var gapSeconds = +document.getElementById('set-gap').value;
+    var rounds = +document.getElementById('set-rounds').value;
+    if(cardSize < 3 || cardSize > 7){ err.textContent = 'Card size: 3-7'; return; }
+    if(cardSize * cardSize > songs.length){ err.textContent = 'Need '+(cardSize*cardSize)+' songs for '+cardSize+'x'+cardSize; return; }
+    var settings = {cardSize:cardSize, pattern:selectedPattern, snippetSeconds:snippetSeconds, gapSeconds:gapSeconds, autoPlay:autoplay, rounds:rounds};
+    socket.emit('create_game', {songs:songs, settings:settings}, function(res){
+      if(res.error){ err.textContent = res.error; return; }
+      saveSession({role: 'host', code: res.code, settings:settings});
+      unlockAudio();
+      renderHostLobby(res.code, res.songs, res.settings, res.round);
+    });
+  };
+}
+
+function renderHostLobby(code, songs, settings, round){
+  document.getElementById('host-setup').classList.add('hidden');
+  var lobby = document.getElementById('host-lobby');
+  lobby.classList.remove('hidden');
+  var dots = '';
+  for(var i=0; i<settings.rounds; i++) dots += '<div class="round-dot '+(i===0?'active':'')+'"></div>';
+  lobby.innerHTML = '<div class="code-hint">Game Code</div><div class="code-display">'+code+'</div>'+
+    '<div class="share-row"><span>Link:</span><input readonly value="'+location.origin+'/?view=join&code='+code+'" onclick="this.select()"><button class="copy-btn" onclick="navigator.clipboard.writeText(this.previousElementSibling.value);toast(\'Copied!\')">Copy</button></div>'+
+    '<div class="pill-wrap"><span class="pill pill-pink">'+PATTERNS[settings.pattern].name+'</span><span class="pill pill-gold">'+settings.cardSize+'x'+settings.cardSize+'</span><span class="pill pill-cyan">'+settings.snippetSeconds+'s</span><span class="pill">'+songs.length+' songs</span></div>'+
+    '<div class="title-sm" style="text-align:center;margin:16px 0 8px;">Players in Lobby</div><div class="lobby-players" id="lobby-players"><div class="lobby-player" style="opacity:0.5;">Waiting...</div></div>'+
+    '<div class="round-indicator">'+dots+'</div>'+
+    '<button class="btn btn-pink" style="margin-top:14px;" id="start-btn">Start Game!</button>'+
+    '<button class="btn btn-danger" id="cancel-btn">Cancel</button>';
+  document.getElementById('start-btn').onclick = function(){ socket.emit('start_game', code); };
+  document.getElementById('cancel-btn').onclick = function(){ clearSession(); location.reload(); };
+}
+
+function renderHostGame(code, songs, settings, state){
+  document.getElementById('host-setup').classList.add('hidden');
+  document.getElementById('host-lobby').classList.add('hidden');
+  var panel = document.getElementById('host-game');
+  panel.classList.remove('hidden');
+
+  var revealed = state.revealed || [];
+  var playerCount = state.playerCount || 0;
+  var winner = state.winner || null;
+  var pendingClaim = state.pendingClaim || null;
+  var status = state.status || 'lobby';
+  var round = state.round || 1;
+  var currentSong = state.currentSong || null;
+  var snippetProgress = 0;
+  var progressInterval = null;
+
+  function draw(){
+    var isPlaying = status === 'playing';
+    var isPaused = status === 'paused';
+    var isEnded = status === 'ended';
+    var html = '<div class="pill-wrap"><span class="pill pill-pink">Round '+round+' / '+settings.rounds+'</span><span class="pill pill-gold">'+PATTERNS[settings.pattern].name+'</span><span class="pill">'+playerCount+' players</span></div>';
+
+    if(currentSong){
+      html += '<div class="now-playing"><div class="now-playing-label">NOW PLAYING</div><div class="now-playing-title">'+currentSong.title+'</div>'+(currentSong.artist?'<div class="now-playing-artist">'+currentSong.artist+'</div>':'');
+      if(settings.autoPlay) html += '<div class="progress-ring-wrap"><div class="progress-ring"><svg width="60" height="60" viewBox="0 0 60 60"><circle class="progress-ring-bg" cx="30" cy="30" r="26"/><circle class="progress-ring-fill" cx="30" cy="30" r="26" stroke-dasharray="163.36" stroke-dashoffset="'+(163.36*(1-snippetProgress))+'"/></svg><div class="progress-ring-text">'+Math.ceil((1-snippetProgress)*settings.snippetSeconds)+'</div></div></div>';
+      html += '<div class="visualizer" id="viz"></div></div>';
+    } else if(isPlaying) html += '<div class="note" style="text-align:center;padding:20px;">Loading next song...</div>';
+
+    if(winner) html += '<div class="winner-banner">'+winner+'</div>';
+    if(pendingClaim && !winner) html += '<div class="claim-banner"><div><b>'+pendingClaim.name+'</b> claims BINGO!</div><div class="claim-actions"><button class="btn btn-green btn-sm" style="flex:1;" id="verify-btn">Confirm</button><button class="btn btn-danger btn-sm" style="flex:1;" id="reject-btn">Reject</button></div></div>';
+
+    if(isEnded && round < settings.rounds) html += '<div class="card card-glow-gold" style="text-align:center;"><div class="title-sm">Round '+round+' Complete!</div><button class="btn btn-gold" id="next-round-btn">Next Round</button></div>';
+    if(isEnded && round >= settings.rounds) html += '<div class="card card-glow-gold" style="text-align:center;"><div class="winner-banner">GAME OVER!</div><button class="btn btn-pink" id="restart-btn">New Game</button></div>';
+
+    html += '<div class="row3" style="margin-top:10px;">';
+    if(isPlaying) html += '<button class="btn btn-orange btn-sm" id="skip-btn">Skip</button><button class="btn btn-ghost btn-sm" id="pause-btn">Pause</button>';
+    if(isPaused) html += '<button class="btn btn-green btn-sm" id="resume-btn">Resume</button><button class="btn btn-orange btn-sm" id="next-btn">Next</button>';
+    if(!isPlaying && !isPaused && !isEnded && status === 'lobby') html += '<button class="btn btn-pink btn-sm" id="start-lobby">Start</button>';
+    html += '</div><button class="btn btn-danger" style="margin-top:8px;" id="leave-btn">End Game</button>';
+
+    html += '<div style="margin-top:16px;"><div class="label">Songs ('+revealed.length+'/'+songs.length+')</div>';
+    songs.forEach(function(s){ html += '<div class="song-row '+(revealed.includes(s.title)?'revealed':'')+'"><div class="song-info"><div class="song-title">'+s.title+'</div></div>'+(revealed.includes(s.title)?'<span class="badge">played</span>':'')+'</div>'; });
+    html += '</div>';
+    panel.innerHTML = html;
+
+    var viz = document.getElementById('viz');
+    if(viz && isPlaying){ for(var i=0;i<12;i++){ var bar=document.createElement('div'); bar.className='visualizer-bar'; bar.style.animationDelay=(i*0.1)+'s'; bar.style.height=(20+Math.random()*80)+'%'; viz.appendChild(bar);} }
+
+    var skipBtn = document.getElementById('skip-btn'); if(skipBtn) skipBtn.onclick = function(){ socket.emit('skip_song', code); };
+    var pauseBtn = document.getElementById('pause-btn'); if(pauseBtn) pauseBtn.onclick = function(){ socket.emit('pause_game', code); };
+    var resumeBtn = document.getElementById('resume-btn'); if(resumeBtn) resumeBtn.onclick = function(){ socket.emit('resume_game', code); };
+    var nextBtn = document.getElementById('next-btn'); if(nextBtn) nextBtn.onclick = function(){ socket.emit('reveal_next', code); };
+    var startLobby = document.getElementById('start-lobby'); if(startLobby) startLobby.onclick = function(){ socket.emit('start_game', code); };
+    var nextRoundBtn = document.getElementById('next-round-btn'); if(nextRoundBtn) nextRoundBtn.onclick = function(){ socket.emit('next_round', code); };
+    var restartBtn = document.getElementById('restart-btn'); if(restartBtn) restartBtn.onclick = function(){ socket.emit('reset_game', code, function(){location.reload();}); };
+    var verifyBtn = document.getElementById('verify-btn'); if(verifyBtn) verifyBtn.onclick = function(){ socket.emit('verify_bingo', code); };
+    var rejectBtn = document.getElementById('reject-btn'); if(rejectBtn) rejectBtn.onclick = function(){ socket.emit('reject_bingo', code); };
+    document.getElementById('leave-btn').onclick = function(){ if(!confirm('End game?')) return; clearSession(); location.href = location.pathname; };
+  }
+
+  function startProgress(){ if(progressInterval) clearInterval(progressInterval); snippetProgress = 0; var step = 1/(settings.snippetSeconds||30); progressInterval = setInterval(function(){ snippetProgress += step; if(snippetProgress >= 1) snippetProgress = 1; draw(); }, 1000); }
+  function stopProgress(){ if(progressInterval){ clearInterval(progressInterval); progressInterval = null; } }
+
+  draw();
+
+  socket.on('players_update', function(data){ playerCount = data.count; draw(); });
+  socket.on('winner_update', function(data){ winner = data.winner; stopProgress(); fireConfetti(); draw(); });
+  socket.on('bingo_claim', function(data){ pendingClaim = data; draw(); });
+  socket.on('bingo_claim_cleared', function(){ pendingClaim = null; draw(); });
+  socket.on('game_update', function(data){ revealed = data.revealed; currentSong = data.currentSong; status = data.status || status; round = data.round || round; if(data.currentSong){ playSong(data.currentSong); startProgress(); } draw(); });
+  socket.on('game_started', function(data){ status = 'playing'; round = data.round; draw(); showCountdown(3); });
+  socket.on('game_paused', function(){ status = 'paused'; stopProgress(); pauseAudio(); draw(); });
+  socket.on('game_resumed', function(){ status = 'playing'; resumeAudio(); startProgress(); draw(); });
+  socket.on('round_ended', function(){ status = 'ended'; stopProgress(); stopAudio(); draw(); });
+  socket.on('new_round', function(data){ status = 'lobby'; round = data.round; revealed = []; currentSong = null; winner = null; pendingClaim = null; stopProgress(); stopAudio(); draw(); toast('Round '+round+' starting!'); });
+  socket.on('game_ended', function(){ status = 'ended'; stopProgress(); stopAudio(); draw(); fireConfetti(); });
+  socket.on('song_ended', function(){ stopProgress(); });
+  socket.on('song_skipped', function(){ stopProgress(); });
+}
+
+// ===== PLAYER =====
+function goJoin(){
+  var session = loadSession();
+  if(session && session.role === 'player' && session.code){
+    doJoin(session.code, session.name || 'Player');
+  } else { renderJoinForm(); }
+}
+
+function renderJoinForm(){
+  var prefill = new URLSearchParams(location.search).get('code') || '';
+  root.innerHTML = '<div class="card"><div class="title-md" style="text-align:center;margin-bottom:16px;">Join Game</div><label class="label">Your Name</label><input class="input" id="join-name" placeholder="Your name" style="margin-bottom:14px;"><label class="label">Game Code</label><input class="input input-code" id="join-code" maxlength="4" value="'+prefill+'" placeholder="XXXX"><button class="btn btn-pink" style="margin-top:16px;" id="join-btn">Join Game</button><div class="error" id="join-error"></div></div>';
+  document.getElementById('join-btn').onclick = function(){
+    var code = document.getElementById('join-code').value.trim().toUpperCase();
+    var name = document.getElementById('join-name').value.trim() || 'Player';
+    doJoin(code, name);
+  };
+}
+
+function doJoin(code, name){
+  var err = document.getElementById('join-error');
+  if(err) err.textContent = '';
+  if(code.length !== 4){ if(err) err.textContent = 'Code is 4 characters'; return; }
+  socket.emit('join_game', {code:code, name:name}, function(res){
+    if(res.error){ if(err) err.textContent = res.error; clearSession(); return; }
+    saveSession({role: 'player', code:code, name:name});
+    renderPlayerCard(code, name, res);
+  });
+}
+
+function renderPlayerCard(code, name, initial){
+  var cardTitles = initial.cardTitles;
+  var size = initial.size;
+  var freeIndex = initial.freeIndex;
+  var totalSongs = initial.totalSongs;
+  var pattern = initial.pattern;
+  var patternName = initial.patternName;
+  var marks = initial.marks;
+  var revealed = initial.revealed;
+  var winner = initial.winner;
+  var status = initial.status || 'lobby';
+  var round = initial.round || 1;
+  var totalRounds = initial.totalRounds || 1;
+  var claimState = 'idle';
+  var currentSong = initial.currentSong || null;
+
+  function checkBingoLocal(){
+    var pid = pattern || '1line';
+    for(var r=0; r<size; r++){
+      var row=true, col=true;
+      for(var c=0; c<size; c++){ if(!marks[r*size+c]) row=false; if(!marks[c*size+r]) col=false; }
+      if(row || col) return true;
+    }
+    var d1=true, d2=true;
+    for(var i=0; i<size; i++){ if(!marks[i*size+i]) d1=false; if(!marks[i*size+(size-1-i)]) d2=false; }
+    if(d1 || d2) return true;
+    if(pid === 'fullhouse'){ for(var i=0; i<marks.length; i++) if(!marks[i]) return false; return true; }
+    if(pid === 'corners'){ if(size<3) return false; return marks[0] && marks[size-1] && marks[size*(size-1)] && marks[size*size-1]; }
+    if(pid === 'cross'){ if(size<3) return false; var mid=Math.floor(size/2); var r=true,c=true; for(var i=0;i<size;i++){ if(!marks[mid*size+i]) r=false; if(!marks[i*size+mid]) c=false; } return r&&c; }
+    if(pid === 'outer'){ for(var r=0;r<size;r++) for(var c=0;c<size;c++) if(r===0||r===size-1||c===0||c===size-1) if(!marks[r*size+c]) return false; return true; }
+    if(pid === 'letterX'){ var x1=true,x2=true; for(var i=0;i<size;i++){ if(!marks[i*size+i]) x1=false; if(!marks[i*size+(size-1-i)]) x2=false; } return x1&&x2; }
+    return false;
+  }
+
+  function draw(){
+    var revealedSet = new Set(revealed);
+    var bingo = checkBingoLocal();
+    var isLobby = status === 'lobby';
+    var isPlaying = status === 'playing';
+    var isPaused = status === 'paused';
+    var isEnded = status === 'ended';
+
+    var html = '<div class="card">';
+    if(winner) html += '<div class="winner-banner">'+winner+'</div>';
+    else if(bingo && claimState === 'idle' && isPlaying) html += '<div class="bingo-banner">BINGO!</div>';
+    if(claimState === 'rejected') html += '<div class="reject-banner">Not confirmed - keep playing!</div>';
+    if(claimState === 'pending') html += '<div class="note" style="text-align:center;">Host is checking...</div>';
+
+    html += '<div class="pill-wrap"><span class="pill pill-pink">Round '+round+'/'+totalRounds+'</span><span class="pill pill-gold">'+(patternName||pattern)+'</span><span class="pill">'+revealed.length+'/'+totalSongs+'</span></div>';
+
+    if(currentSong){ html += '<div class="now-playing" style="padding:12px;"><div class="now-playing-label" style="font-size:9px;">NOW PLAYING</div><div class="now-playing-title" style="font-size:15px;">'+currentSong.title+'</div>'+(currentSong.artist?'<div class="now-playing-artist">'+currentSong.artist+'</div>':'')+'</div>'; }
+    if(isLobby) html += '<div class="note" style="text-align:center;padding:20px;"><div style="font-size:32px;margin-bottom:10px;">...</div><div style="font-weight:700;font-size:16px;">Waiting to start</div></div>';
+    if(isPaused) html += '<div class="note" style="text-align:center;padding:16px;"><div style="font-size:28px;margin-bottom:8px;">||</div><div style="font-weight:700;">Paused</div></div>';
+    if(isEnded) html += '<div class="note" style="text-align:center;padding:16px;"><div style="font-size:28px;margin-bottom:8px;">#</div><div style="font-weight:700;">Round Complete!</div></div>';
+
+    html += '<div class="grid-wrap"><div class="grid" style="grid-template-columns:repeat('+size+',1fr);">';
+    cardTitles.forEach(function(title, i){
+      var cls = 'cell';
+      if(i === freeIndex) cls += ' free';
+      else if(marks[i]) cls += ' hit';
+      else if(revealedSet.has(title)) cls += ' ready';
+      html += '<div class="'+cls+'" data-i="'+i+'">'+(i===freeIndex?'FREE':title)+'</div>';
+    });
+    html += '</div></div>';
+
+    if(bingo && !winner && claimState === 'idle' && isPlaying) html += '<button class="btn btn-gold" style="margin-top:14px;" id="claim-btn">Claim BINGO!</button>';
+    html += '<button class="btn btn-danger" style="margin-top:8px;" id="leave-btn">Leave Game</button>';
+    html += '<div class="note">Tap revealed songs (gold border) to mark. Tap again to unmark.</div></div>';
+    root.innerHTML = html;
+
+    root.querySelectorAll('.cell').forEach(function(el){
+      var i = +el.dataset.i;
+      if(i === freeIndex) return;
+      el.onclick = function(){
+        if(!(marks[i] || revealedSet.has(cardTitles[i]))) return;
+        marks[i] = !marks[i];
+        socket.emit('toggle_mark', {code:code, index:i});
+        draw();
+      };
+    });
+
+    var claimBtn = document.getElementById('claim-btn');
+    if(claimBtn){ claimBtn.onclick = function(){ if(!confirm('Claim BINGO?')) return; claimState = 'pending'; socket.emit('claim_bingo', code); draw(); }; }
+    document.getElementById('leave-btn').onclick = function(){ clearSession(); location.href = location.pathname + '?view=join'; };
+  }
+
+  draw();
+
+  socket.on('game_update', function(data){ revealed = data.revealed; currentSong = data.currentSong; status = data.status || status; round = data.round || round; draw(); });
+  socket.on('game_started', function(data){ status = 'playing'; round = data.round; draw(); showCountdown(3); });
+  socket.on('game_paused', function(){ status = 'paused'; draw(); });
+  socket.on('game_resumed', function(){ status = 'playing'; draw(); });
+  socket.on('round_ended', function(){ status = 'ended'; draw(); });
+  socket.on('new_round', function(data){ status = 'lobby'; round = data.round; revealed = []; currentSong = null; winner = null; claimState = 'idle'; marks = new Array(marks.length).fill(false); if(freeIndex >= 0) marks[freeIndex] = true; draw(); });
+  socket.on('winner_update', function(data){ winner = data.winner; claimState = 'idle'; if(winner === name) fireConfetti(); draw(); });
+  socket.on('mark_update', function(data){ marks = data.marks; draw(); });
+  socket.on('bingo_rejected', function(){ claimState = 'rejected'; draw(); setTimeout(function(){ claimState='idle'; draw(); }, 4000); });
+}
+
+// ===== SCREEN =====
+function goScreen(){
+  var session = loadSession();
+  if(session && session.role === 'screen' && session.code){ doScreen(session.code); }
+  else { renderScreenForm(); }
+}
+
+function renderScreenForm(){
+  var prefill = new URLSearchParams(location.search).get('code') || '';
+  root.innerHTML = '<div class="card"><div class="title-md" style="text-align:center;margin-bottom:16px;">TV Screen</div><label class="label">Game Code</label><input class="input input-code" id="scr-code" maxlength="4" value="'+prefill+'" placeholder="XXXX"><button class="btn btn-pink" style="margin-top:16px;" id="scr-go">Show</button><div class="error" id="scr-error"></div></div>';
+  document.getElementById('scr-go').onclick = function(){ doScreen(document.getElementById('scr-code').value.trim().toUpperCase()); };
+}
+
+function doScreen(code){
+  var err = document.getElementById('scr-error');
+  if(code.length !== 4){ if(err) err.textContent = 'Code is 4 chars'; return; }
+  socket.emit('join_game', {code:code, name: '__screen__'}, function(res){
+    if(res.error){ if(err) err.textContent = res.error; clearSession(); return; }
+    saveSession({role: 'screen', code:code});
+    renderScreenView(code, res);
+  });
+}
+
+function renderScreenView(code, initial){
+  var playerCount = 0, winner = initial.winner || null, lastSong = null;
+  var status = initial.status || 'lobby', round = initial.round || 1;
+  var totalRounds = initial.totalRounds || 1, patternName = initial.patternName || '';
+  var unlocked = false;
+  document.getElementById('app').classList.add('app-wide');
+
+  function draw(){
+    var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=' + encodeURIComponent(location.origin + '/?view=join&code=' + code);
+    var html = '<div class="card" style="text-align:center;padding:30px;"><img class="qr-img" src="'+qrUrl+'" width="260" height="260" alt="QR"><div class="screen-code">'+code+'</div><div class="screen-players">'+playerCount+' players online</div>';
+    html += '<div class="pill-wrap" style="margin-top:16px;"><span class="pill pill-pink">Round '+round+'/'+totalRounds+'</span><span class="pill pill-gold">'+patternName+'</span></div>';
+    if(winner) html += '<div class="winner-banner" style="font-size:56px;margin-top:20px;">'+winner+'</div><div style="font-size:20px;color:#ffd700;margin-top:8px;">WINNER!</div>';
+    else if(lastSong) html += '<div class="screen-now-playing" style="margin-top:24px;">'+lastSong.title+'</div>'+(lastSong.artist?'<div class="screen-artist">'+lastSong.artist+'</div>':'')+'<div class="visualizer" style="margin-top:16px;height:40px;" id="scr-viz"></div>';
+    else html += '<div style="font-size:24px;color:#8a8aa0;margin-top:30px;">'+(status==='lobby'?'Waiting...':(status==='paused'?'Paused':(status==='ended'?'Round Complete':'Starting soon!')))+'</div>';
+    if(!unlocked) html += '<button class="btn btn-ghost" style="margin-top:20px;max-width:300px;margin-left:auto;margin-right:auto;" id="en-sound">Enable Sound</button>';
+    html += '</div>';
+    root.innerHTML = html;
+
+    var viz = document.getElementById('scr-viz');
+    if(viz && !winner && lastSong){ for(var i=0;i<16;i++){ var bar=document.createElement('div'); bar.className='visualizer-bar'; bar.style.animationDelay=(i*0.08)+'s'; bar.style.height=(15+Math.random()*85)+'%'; viz.appendChild(bar);} }
+
+    var soundBtn = document.getElementById('en-sound');
+    if(soundBtn) soundBtn.onclick = function(){ unlocked = true; unlockAudio(); draw(); };
+  }
+
+  draw();
+  socket.on('players_update', function(data){ playerCount = data.count; draw(); });
+  socket.on('winner_update', function(data){ winner = data.winner; draw(); });
+  socket.on('game_update', function(data){ lastSong = data.currentSong; status = data.status || status; round = data.round || round; if(unlocked && data.currentSong) playSong(data.currentSong); draw(); });
+  socket.on('game_started', function(data){ status = 'playing'; round = data.round; draw(); showCountdown(3); });
+  socket.on('game_paused', function(){ status = 'paused'; pauseAudio(); draw(); });
+  socket.on('game_resumed', function(){ status = 'playing'; resumeAudio(); draw(); });
+  socket.on('round_ended', function(){ status = 'ended'; stopAudio(); draw(); });
+  socket.on('new_round', function(data){ status = 'lobby'; round = data.round; winner = null; lastSong = null; draw(); });
+  socket.on('countdown', function(data){ if(data.count > 0) showCountdown(data.count); });
+}
+
+// ===== INIT =====
+var session = loadSession();
+var iv = new URLSearchParams(location.search).get('view') || new URLSearchParams(location.search).get('tab');
+if(iv === 'join'){ setActiveTab('join'); goJoin(); }
+else if(iv === 'screen'){ setActiveTab('screen'); goScreen(); }
+else if(iv === 'host'){ setActiveTab('host'); goHost(); }
+else if(session && session.role === 'host'){ setActiveTab('host'); goHost(); }
+else if(session && session.role === 'player'){ setActiveTab('join'); goJoin(); }
+else if(session && session.role === 'screen'){ setActiveTab('screen'); goScreen(); }
+else { setActiveTab('host'); renderHostSetup(); }
+
+socket.on('connect', function(){
+  var s = loadSession();
+  if(s && s.role === 'host' && s.code) socket.emit('host_rejoin', s.code);
+  else if(s && s.role === 'player' && s.code && s.name) doJoin(s.code, s.name);
+  else if(s && s.role === 'screen' && s.code) doScreen(s.code);
+});
+</script>
+</body>
+</html>
