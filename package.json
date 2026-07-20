@@ -1,9 +1,10 @@
 {
-  "name": "music-bingo-server",
-  "version": "1.0.0",
+  "name": "music-bingo-rockstar",
+  "version": "2.0.0",
   "private": true,
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "dev": "node server.js"
   },
   "engines": {
     "node": ">=18"
@@ -11,6 +12,7 @@
   "dependencies": {
     "express": "^4.19.2",
     "socket.io": "^4.7.5",
-    "multer": "^1.4.5-lts.1"
+    "multer": "^1.4.5-lts.1",
+    "uuid": "^9.0.1"
   }
 }
