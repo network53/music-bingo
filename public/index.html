@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Music Bingo (White Star)</title>
+<title>Music Bingo</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Grotesk:wght@400;500;700&display=swap');
   :root{
@@ -43,14 +43,17 @@
   .mb-btn:disabled{opacity:0.4; cursor:not-allowed;}
   .mb-code-display{font-family:'Bebas Neue', sans-serif; font-size:52px; letter-spacing:10px; text-align:center; color:var(--gold); text-shadow:0 0 24px rgba(255,210,63,0.5); margin:6px 0 2px;}
   .mb-code-hint{text-align:center; color:var(--ink-dim); font-size:12px; margin-bottom:6px;}
+  .mb-share-row{display:flex; gap:8px; align-items:center; background:#0f0c16; border:1px solid var(--line); border-radius:10px; padding:8px 10px; margin-top:10px; font-size:11.5px; color:var(--ink-dim);}
+  .mb-share-row input{border:none; background:transparent; color:var(--ink); flex:1; font-size:11.5px; padding:0;}
   .mb-song-row{display:flex; justify-content:space-between; align-items:center; padding:9px 0; border-bottom:1px solid var(--line); font-size:13px; gap:8px;}
   .mb-song-row.revealed{color:var(--gold);}
   .mb-badge{font-size:10px; padding:2px 8px; border-radius:20px; background:rgba(255,210,63,0.15); color:var(--gold); font-weight:700; white-space:nowrap;}
   .mb-remove{color:var(--pink); cursor:pointer; font-size:16px; font-weight:700; padding:0 4px;}
   .mb-grid{display:grid; gap:6px; margin-top:6px;}
-  .mb-cell{aspect-ratio:1; display:flex; align-items:center; justify-content:center; text-align:center; font-size:10.5px; line-height:1.15; padding:4px; border-radius:9px; background:#0f0c16; border:1px solid var(--line); color:var(--ink-dim); transition:all .25s ease;}
-  .mb-cell.hit{background:radial-gradient(circle, var(--pink), #c2255f); color:#fff; border-color:var(--pink); box-shadow:0 0 14px rgba(255,61,127,0.55); transform:scale(1.03);}
-  .mb-cell.free{background:linear-gradient(160deg, var(--gold), #d8ab1f); color:#1a0f16; font-weight:700; border-color:var(--gold);}
+  .mb-cell{aspect-ratio:1; display:flex; align-items:center; justify-content:center; text-align:center; font-size:10.5px; line-height:1.15; padding:4px; border-radius:9px; background:#0f0c16; border:1px solid var(--line); color:var(--ink-dim); transition:all .2s ease; opacity:0.55;}
+  .mb-cell.ready{opacity:1; border-color:var(--gold); box-shadow:0 0 8px rgba(255,210,63,0.35); cursor:pointer; color:var(--ink);}
+  .mb-cell.hit{opacity:1; cursor:pointer; background:radial-gradient(circle, var(--pink), #c2255f); color:#fff; border-color:var(--pink); box-shadow:0 0 14px rgba(255,61,127,0.55); transform:scale(1.03);}
+  .mb-cell.free{opacity:1; background:linear-gradient(160deg, var(--gold), #d8ab1f); color:#1a0f16; font-weight:700; border-color:var(--gold);}
   .mb-bingo-banner{text-align:center; font-family:'Bebas Neue', sans-serif; font-size:34px; letter-spacing:4px; color:var(--gold); text-shadow:0 0 20px rgba(255,210,63,0.6); margin:10px 0 4px; animation:mbPulse 1s ease-in-out infinite;}
   @keyframes mbPulse{0%,100%{transform:scale(1);} 50%{transform:scale(1.05);}}
   .mb-error{color:var(--pink); font-size:13px; margin-top:8px; text-align:center;}
@@ -71,10 +74,13 @@
   .mb-folder-name{font-weight:700; font-size:14px;}
   .mb-folder-count{color:var(--ink-dim); font-size:12px;}
   .mb-folder-actions{display:flex; gap:6px; margin-top:10px;}
+  .mb-claim-banner{background:rgba(255,210,63,0.12); border:1px solid var(--gold); border-radius:12px; padding:14px; text-align:center; margin-bottom:14px;}
+  .mb-claim-banner b{color:var(--gold);}
+  .mb-reject-banner{background:rgba(255,61,127,0.12); border:1px solid var(--pink); border-radius:10px; padding:10px; text-align:center; font-size:13px; margin-bottom:12px; color:var(--pink);}
 </style>
 </head>
 <body>
-  <div class="mb-title">MUSIC BINGO (White Star)</div>
+  <div class="mb-title">MUSIC BINGO</div>
   <div class="mb-sub">ведущий включает — игроки отмечают с телефона</div>
   <div class="mb-tabs">
     <div class="mb-tab active" data-tab="host">Ведущий</div>
@@ -93,7 +99,7 @@
   const audioEl = document.getElementById('mb-audio');
   let audioUnlocked = false;
 
-  const LS_KEY = 'mb_session_v1';
+  const LS_KEY = 'mb_session_v2';
   function saveSession(obj){ try{ localStorage.setItem(LS_KEY, JSON.stringify(obj)); }catch(e){} }
   function loadSession(){ try{ return JSON.parse(localStorage.getItem(LS_KEY)); }catch(e){ return null; } }
   function clearSession(){ try{ localStorage.removeItem(LS_KEY); }catch(e){} }
@@ -105,21 +111,13 @@
   }
 
   const urlParams = new URLSearchParams(location.search);
+  const initialView = urlParams.get('view') || urlParams.get('tab'); // 'tab' kept for old QR links
 
-  function gridSizeFor(n){
-    if(n>=24) return 5;
-    if(n>=16) return 4;
-    if(n>=9) return 3;
-    return 0;
-  }
-  function shuffle(arr){
-    const a = arr.slice();
-    for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
-    return a;
-  }
   function setActiveTab(name){
     tabs.forEach(x => x.classList.toggle('active', x.dataset.tab === name));
   }
+  function hostShareLink(){ return location.origin + '/?view=host'; }
+  function joinShareLink(code){ return location.origin + '/?view=join' + (code ? ('&code='+code) : ''); }
 
   // ======================================================================
   // HOST
@@ -149,10 +147,9 @@
     document.getElementById('mb-host-setup').style.display = 'none';
     audioUnlocked = true;
     audioEl.play().catch(()=>{});
-    renderHostGame(code, songs, { revealed: [], winner: null, playerCount: 0 });
+    renderHostGame(code, songs, { revealed: [], winner: null, playerCount: 0, pendingClaim: null });
   }
 
-  // ---- Quick manual list (ephemeral, no persistence, no audio) ----
   function drawQuickSection(){
     const box = document.getElementById('mb-host-sub');
     box.innerHTML = `
@@ -174,7 +171,6 @@
     };
   }
 
-  // ---- Library (persistent folders on the server) ----
   async function fetchLibrary(){
     const res = await fetch('/api/library');
     return res.json();
@@ -304,14 +300,22 @@
     let revealed = initial.revealed || [];
     let playerCount = initial.playerCount || 0;
     let winner = initial.winner || null;
+    let pendingClaim = initial.pendingClaim || null;
 
     function draw(){
       const remaining = songs.filter(s => !revealed.includes(s.title));
+      const joinLink = joinShareLink(code);
       panel.innerHTML = `
         <div class="mb-code-hint">Код игры — сообщите игрокам:</div>
         <div class="mb-code-display">${code}</div>
+        <div class="mb-share-row"><span>Ссылка игрокам:</span><input readonly value="${joinLink}" onclick="this.select()"></div>
         <div class="mb-pill-wrap"><span class="mb-pill">Игроков онлайн: ${playerCount}</span></div>
         ${winner ? `<div class="mb-winner-banner">🏆 ${winner}</div>` : ''}
+        ${(pendingClaim && !winner) ? `
+          <div class="mb-claim-banner">
+            <div><b>${pendingClaim.name}</b> заявляет BINGO!</div>
+            <button class="mb-btn mb-btn-gold" id="mb-verify">Проверить</button>
+          </div>` : ''}
         <div class="mb-row2">
           <button class="mb-btn mb-btn-primary" id="mb-next" ${remaining.length===0?'disabled':''}>Следующая песня</button>
           <button class="mb-btn mb-btn-ghost" id="mb-reset">Сброс</button>
@@ -334,25 +338,46 @@
       };
       document.getElementById('mb-reset').onclick = () => {
         if(!confirm('Сбросить все отметки для игры ' + code + '?')) return;
-        socket.emit('reset_game', code, () => { revealed = []; winner = null; draw(); });
+        socket.emit('reset_game', code, () => { revealed = []; winner = null; pendingClaim = null; draw(); });
       };
       document.getElementById('mb-leave').onclick = () => {
         if(!confirm('Завершить текущую игру? Код перестанет быть активным на этом экране.')) return;
         clearSession();
-        location.reload();
+        location.href = location.pathname + '?view=host';
       };
+      const verifyBtn = document.getElementById('mb-verify');
+      if(verifyBtn){
+        verifyBtn.onclick = () => {
+          socket.emit('verify_bingo', code, () => {});
+        };
+      }
     }
     draw();
     socket.on('players_update', (data) => { playerCount = data.count; draw(); });
-    socket.on('winner_update', (data) => { winner = data.winner; draw(); });
+    socket.on('winner_update', (data) => { winner = data.winner; pendingClaim = null; draw(); });
+    socket.on('bingo_claim', (data) => { pendingClaim = data; draw(); });
+    socket.on('bingo_claim_cleared', () => { pendingClaim = null; draw(); });
+    socket.on('game_update', (data) => { revealed = data.revealed; draw(); });
   }
 
   function resumeHost(code){
     socket.emit('host_rejoin', code, (res) => {
       if(res.error){ clearSession(); renderHost(); return; }
       root.innerHTML = `<div class="mb-card" id="mb-host-setup" style="display:none;"></div><div class="mb-card" id="mb-host-game"></div>`;
-      renderHostGame(code, res.songs, { revealed: res.revealed, winner: res.winner, playerCount: res.playerCount });
+      renderHostGame(code, res.songs, {
+        revealed: res.revealed, winner: res.winner, playerCount: res.playerCount, pendingClaim: res.pendingClaim
+      });
     });
+  }
+
+  function goHostTab(){
+    const session = loadSession();
+    if(session && session.role === 'host' && session.code){
+      root.innerHTML = `<div class="mb-card" id="mb-host-setup" style="display:none;"></div><div class="mb-card" id="mb-host-game"></div>`;
+      resumeHost(session.code);
+    } else {
+      renderHost();
+    }
   }
 
   // ======================================================================
@@ -388,80 +413,102 @@
         clearSession();
         return;
       }
-      const size = gridSizeFor(res.songs.length);
-      if(size === 0){ if(err) err.textContent = 'В этой игре пока маловато песен для карточки.'; return; }
       saveSession({ role:'player', code, name });
       const firstCard = root.querySelector('.mb-card');
       if(firstCard) firstCard.style.display = 'none';
       if(!document.getElementById('mb-join-game')){
         root.innerHTML = `<div class="mb-card" id="mb-join-game"></div>`;
       }
-      startPlayerCard(code, name, res.songs, res.revealed, res.winner, size);
+      startPlayerCard(code, name, res);
     });
   }
 
-  function resumePlayer(code, name){
-    root.innerHTML = `<div class="mb-card" id="mb-join-game"></div>`;
-    doJoin(code, name);
+  function goJoinTab(){
+    const session = loadSession();
+    if(session && session.role === 'player' && session.code){
+      root.innerHTML = `<div class="mb-card" id="mb-join-game"></div>`;
+      doJoin(session.code, session.name);
+    } else {
+      renderJoin();
+    }
   }
 
-  function startPlayerCard(code, myName, songs, initialRevealed, initialWinner, size){
-    const total = size*size;
-    const freeIndex = size % 2 === 1 ? Math.floor(total/2) : -1;
-    const chosen = shuffle(songs).slice(0, total);
+  function startPlayerCard(code, myName, initial){
+    const { cardTitles, size, freeIndex, totalSongs } = initial;
+    let marks = initial.marks;
+    let revealed = initial.revealed;
+    let winner = initial.winner;
+    let claimState = 'idle'; // idle | pending | rejected
     const panel = document.getElementById('mb-join-game');
     panel.style.display = 'block';
-    let revealed = initialRevealed;
-    let winner = initialWinner;
-    let claimed = false;
 
-    function checkBingo(hitMask){
+    function checkBingoLocal(){
       for(let r=0;r<size;r++){
         let row=true, col=true;
         for(let c=0;c<size;c++){
-          if(!hitMask[r*size+c]) row=false;
-          if(!hitMask[c*size+r]) col=false;
+          if(!marks[r*size+c]) row=false;
+          if(!marks[c*size+r]) col=false;
         }
         if(row||col) return true;
       }
       let d1=true, d2=true;
       for(let i=0;i<size;i++){
-        if(!hitMask[i*size+i]) d1=false;
-        if(!hitMask[i*size+(size-1-i)]) d2=false;
+        if(!marks[i*size+i]) d1=false;
+        if(!marks[i*size+(size-1-i)]) d2=false;
       }
       return d1||d2;
     }
 
     function draw(){
       const revealedSet = new Set(revealed);
-      const hitMask = chosen.map((s,i) => i===freeIndex || revealedSet.has(s));
-      const bingo = checkBingo(hitMask);
+      const bingo = checkBingoLocal();
       panel.innerHTML = `
-        ${winner ? `<div class="mb-winner-banner">🏆 ${winner}</div>` : (bingo ? '<div class="mb-bingo-banner">БИНГО! 🎉</div>' : '')}
-        <div class="mb-code-hint">Код игры: ${code} · прозвучало ${revealed.length} / ${songs.length}</div>
+        ${winner ? `<div class="mb-winner-banner">🏆 ${winner}</div>` : (bingo && claimState==='idle' ? '<div class="mb-bingo-banner">БИНГО! 🎉</div>' : '')}
+        ${claimState === 'rejected' ? '<div class="mb-reject-banner">Не подтвердилось — проверьте карточку и играйте дальше.</div>' : ''}
+        ${claimState === 'pending' ? '<div class="mb-note" style="text-align:center;">Ведущий проверяет вашу заявку...</div>' : ''}
+        <div class="mb-code-hint">Код игры: ${code} · прозвучало ${revealed.length} / ${totalSongs}</div>
         <div class="mb-grid" style="grid-template-columns:repeat(${size},1fr);">
-          ${chosen.map((s,i)=>`<div class="mb-cell ${i===freeIndex?'free':(hitMask[i]?'hit':'')}">${i===freeIndex?'★':s}</div>`).join('')}
+          ${cardTitles.map((title,i)=>{
+            let cls = 'mb-cell';
+            if(i === freeIndex) cls += ' free';
+            else if(marks[i]) cls += ' hit';
+            else if(revealedSet.has(title)) cls += ' ready';
+            return `<div class="${cls}" data-i="${i}">${i===freeIndex?'★':title}</div>`;
+          }).join('')}
         </div>
-        ${(bingo && !winner) ? `<button class="mb-btn mb-btn-gold" id="mb-claim" ${claimed?'disabled':''}>${claimed?'Заявка отправлена':'Заявить BINGO!'}</button>` : ''}
+        ${(bingo && !winner && claimState==='idle') ? `<button class="mb-btn mb-btn-gold" id="mb-claim">Заявить BINGO!</button>` : ''}
         <button class="mb-btn mb-btn-danger" id="mb-leave-player">Покинуть игру</button>
-        <div class="mb-note">Карточка обновляется мгновенно, когда ведущий отмечает новую песню.</div>
+        <div class="mb-note">Нажимайте на прозвучавшие песни (с золотой рамкой), чтобы отметить их на карточке. Повторный клик — снять отметку.</div>
       `;
+      panel.querySelectorAll('.mb-cell').forEach(el => {
+        const i = +el.dataset.i;
+        if(i === freeIndex) return;
+        el.onclick = () => {
+          if(!(marks[i] || revealedSet.has(cardTitles[i]))) return; // not revealed yet, ignore
+          marks[i] = !marks[i];
+          socket.emit('toggle_mark', code, i);
+          draw();
+        };
+      });
       const claimBtn = document.getElementById('mb-claim');
       if(claimBtn){
         claimBtn.onclick = () => {
-          claimed = true;
-          socket.emit('claim_bingo', code, myName);
+          if(!confirm('Вы уверены, что хотите заявить BINGO?')) return;
+          claimState = 'pending';
+          socket.emit('claim_bingo', code);
           draw();
         };
       }
       document.getElementById('mb-leave-player').onclick = () => {
         clearSession();
-        location.reload();
+        location.href = location.pathname + '?view=join';
       };
     }
     draw();
     socket.on('game_update', (data) => { revealed = data.revealed; draw(); });
-    socket.on('winner_update', (data) => { winner = data.winner; draw(); });
+    socket.on('winner_update', (data) => { winner = data.winner; claimState = 'idle'; draw(); });
+    socket.on('mark_update', (data) => { marks = data.marks; draw(); });
+    socket.on('bingo_rejected', () => { claimState = 'rejected'; draw(); setTimeout(() => { claimState='idle'; draw(); }, 4000); });
   }
 
   // ======================================================================
@@ -499,16 +546,20 @@
     });
   }
 
-  function resumeScreen(code){
-    root.innerHTML = `<div id="mb-screen-view"></div>`;
-    goScreen(code);
+  function goScreenTab(){
+    const session = loadSession();
+    if(session && session.role === 'screen' && session.code){
+      root.innerHTML = `<div id="mb-screen-view"></div>`;
+      goScreen(session.code);
+    } else {
+      renderScreen();
+    }
   }
 
   function showScreen(code, initialWinner){
     const view = document.getElementById('mb-screen-view');
     view.style.display = 'block';
-    const joinUrl = location.origin + '/?tab=join&code=' + code;
-    const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=' + encodeURIComponent(joinUrl);
+    const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=' + encodeURIComponent(joinShareLink(code));
     let playerCount = 0;
     let winner = initialWinner;
     let lastSong = null;
@@ -545,25 +596,24 @@
   tabs.forEach(t => t.addEventListener('click', () => {
     setActiveTab(t.dataset.tab);
     const tab = t.dataset.tab;
-    if(tab==='host') renderHost();
-    else if(tab==='join') renderJoin();
-    else renderScreen();
+    if(tab==='host') goHostTab();
+    else if(tab==='join') goJoinTab();
+    else goScreenTab();
   }));
 
   const session = loadSession();
-  if(session && session.role === 'host' && session.code){
-    setActiveTab('host');
-    root.innerHTML = `<div class="mb-card" id="mb-host-setup" style="display:none;"></div><div class="mb-card" id="mb-host-game"></div>`;
-    resumeHost(session.code);
-  } else if(session && session.role === 'player' && session.code){
-    setActiveTab('join');
-    resumePlayer(session.code, session.name);
-  } else if(session && session.role === 'screen' && session.code){
-    setActiveTab('screen');
-    resumeScreen(session.code);
-  } else if(urlParams.get('tab') === 'join'){
-    setActiveTab('join');
-    renderJoin();
+  if(initialView === 'join'){
+    setActiveTab('join'); goJoinTab();
+  } else if(initialView === 'screen'){
+    setActiveTab('screen'); goScreenTab();
+  } else if(initialView === 'host'){
+    setActiveTab('host'); goHostTab();
+  } else if(session && session.role === 'host'){
+    setActiveTab('host'); goHostTab();
+  } else if(session && session.role === 'player'){
+    setActiveTab('join'); goJoinTab();
+  } else if(session && session.role === 'screen'){
+    setActiveTab('screen'); goScreenTab();
   } else {
     renderHost();
   }
